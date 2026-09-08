@@ -69,9 +69,12 @@ export async function launchTask(
     });
   } else {
     // === INJECT (default): session.create + context injection ===
+    // Deliberately do NOT set parentID: background sessions are created as
+    // normal (root) conversations so they appear in the conversation list and
+    // can be inspected directly in the UI. Parent linkage is tracked by the
+    // manager (task.parentSessionID), not by the session's parent_id.
     const createResult = await client.session.create({
       body: {
-        parentID: input.parentSessionID,
         title: input.fork
           ? `Background (forked): ${input.description}`
           : `Background: ${input.description}`,
@@ -167,6 +170,9 @@ export async function launchTask(
     bgagent_cancel: agentToolConfig["bgagent_cancel"] === true,
     bgagent_list: agentToolConfig["bgagent_list"] === true,
     bgagent_clear: agentToolConfig["bgagent_clear"] === true,
+    bgagent_steer: agentToolConfig["bgagent_steer"] === true,
+    bgagent_progress: agentToolConfig["bgagent_progress"] === true,
+    bgagent_report: agentToolConfig["bgagent_report"] === true,
   };
 
   client.session

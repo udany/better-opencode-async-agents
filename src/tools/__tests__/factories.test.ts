@@ -71,6 +71,28 @@ describe("tool factories", () => {
       expect(result).toContain(shortId(mockTask.sessionID)); // shortId removes ses_ prefix
       expect(launchMock).toHaveBeenCalled();
     });
+
+    test("attaches child sessionId to tool part metadata for UI navigation", async () => {
+      const mockTask = createMockTask();
+      const launchMock = mock(() => Promise.resolve(mockTask));
+      const mockManager = createMockTaskManager(launchMock);
+      const tool = createBackgroundTask(mockManager);
+      const metadataMock = mock(() => {});
+
+      const result = await tool.execute(
+        { description: "test", prompt: "test prompt", agent: "explore" },
+        { sessionID: "ses_parent", messageID: "msg", agent: "test", metadata: metadataMock } as any
+      );
+
+      expect(result).toContain("Background task launched");
+      expect(metadataMock).toHaveBeenCalledWith({
+        title: "test",
+        metadata: {
+          sessionId: mockTask.sessionID,
+          parentSessionId: mockTask.parentSessionID,
+        },
+      });
+    });
   });
 
   describe("createBackgroundCancel", () => {

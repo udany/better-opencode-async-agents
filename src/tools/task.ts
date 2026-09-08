@@ -136,6 +136,14 @@ async function handleLaunchMode(
       parentAgent: toolContext.agent,
     });
 
+    // Link the child session to this tool part so the UI renders a
+    // clickable subagent card in the parent timeline (same mechanism as the
+    // native `task` tool: state.metadata.sessionId drives child navigation).
+    toolContext?.metadata?.({
+      title: args.description,
+      metadata: { sessionId: task.sessionID, parentSessionId: task.parentSessionID },
+    });
+
     // Get sibling IDs to generate collision-free short ID
     const siblingIds = manager.getTaskSessionIds?.() ?? [];
     const displayId = uniqueShortId(task.sessionID, siblingIds);

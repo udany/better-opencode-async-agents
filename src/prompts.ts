@@ -71,6 +71,43 @@ Note: full_session works for both running and completed tasks. For running tasks
 
 Use this to stop all running background agents and clear the task list.
 This is useful when you want to start fresh or cancel all pending work.`,
+
+  backgroundSteer: `Send a steering message to a RUNNING background task.
+
+The task's agent reads it at its next step and changes course. Use this to:
+- Redirect an agent that is going the wrong way
+- Request a compact status report ("give status report: what's done, what's left?")
+
+Does NOT pollute your context with the task's full history — if instructed,
+the child replies via bgagent_report with a short summary.
+
+Arguments:
+- task_id: Required task ID to steer
+- message: The steering instruction / status-report request
+
+Note: if the agent is mid long-running tool, the message is read when that tool yields.
+Use bgagent_cancel to abort a runaway tool instead.`,
+  backgroundProgress: `Get lightweight progress from a background task WITHOUT dumping its full history.
+
+Returns compact metadata only: status, phase, tool call counts, last tools used,
+elapsed time, and an optional short tail of the latest assistant text.
+
+Arguments:
+- task_id: Required task ID
+- tail: Optional number of chars of latest assistant text to include (default 300, max 2000). 0 = metadata only.
+
+Prefer this over bgagent_output(...full_session=true) to avoid polluting your context
+with the task's full token history.`,
+  backgroundReport: `Call this from WITHIN a child/background agent to send a short status report or question to its parent session.
+
+Use for progress updates ("done X, still need Y") or to ask the parent something.
+This is the channel for child->parent communication. It sends a compact message to the
+parent instead of outputting a huge context dump.
+
+Arguments:
+- message: The report/question text (keep it concise)
+
+Requires the child agent's config to enable bgagent_report.`,
 };
 
 // =============================================================================
@@ -118,6 +155,13 @@ Total tasks cleared: ${totalCount}`,
 
   resumeResponseNoContent: (resumeCount: number) =>
     `✓ **Resume Response** (count: ${resumeCount})\n\n(No response found)`,
+
+  steerInitiated: (shortTaskId: string) => `⏳ **Steering message sent**
+Task ID: \`${shortTaskId}\`
+The agent will read it at its next step. Use bgagent_progress for live updates.`,
+
+  reportSent: (parentShortId: string) => `✓ **Report sent to parent**
+Parent: \`${parentShortId}\``,
 };
 
 // =============================================================================
@@ -153,6 +197,15 @@ export const ERROR_MESSAGES = {
   clearFailed: (message: string) => `Error clearing tasks: ${message}`,
   resumeFailed: (errorMsg: string) => `Error resuming task: ${errorMsg}`,
   fetchMessagesFailed: (errMsg: string) => `Error fetching messages: ${errMsg}`,
+
+  // Steer / progress / report errors
+  onlyRunningCanSteer: (status: string) =>
+    `Task cannot be steered (status: ${status}). Only running or resumed tasks can be steered.`,
+  steerFailed: (message: string) => `Error steering task: ${message}`,
+  progressFailed: (message: string) => `Error getting progress: ${message}`,
+  reportFailed: (message: string) => `Error sending report: ${message}`,
+  reportNoParent:
+    "This session is not a background task with a parent. bgagent_report is only available to child/background agents.",
 
   // List empty states
   noTasksFound: "No background tasks found.",

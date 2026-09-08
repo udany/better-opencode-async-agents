@@ -36,17 +36,26 @@ This is the subagent/subtask plugin we all know and love, with some key features
 
 - **Dynamic Agent Response Collection**: Collect responses from agents in blocking or non-blocking modes. Wait for all tasks to complete or check progress incrementally.
 
+- **Live Steering**: Send a message to a running task; its agent reads it at its next step and changes course — no need to cancel and restart.
+
+- **Child→Parent Reporting**: Background agents can send compact status reports/questions back to the orchestrator (`bgagent_report`) without dumping their full history into its context.
+
+- **Inspectable Sessions**: Each background task runs as a normal conversation in the UI, so you can open and watch it live.
+
 - **Variable Timeouts**: Configure custom timeouts per task. Some tasks need seconds, others need minutes - you decide.
 
 ## Tools Provided
 
 | Tool | Description |
 |------|-------------|
-| `asyncagents_task` | Launch async background agent tasks with description, prompt, and agent type |
-| `asyncagents_output` | Get task results (blocking or non-blocking) with configurable timeout |
-| `asyncagents_cancel` | Cancel a running task |
-| `asyncagents_list` | List all tasks with optional status filter |
-| `asyncagents_clear` | Abort and clear all tasks |
+| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, and agent type |
+| `bgagent_output` | Get task results (blocking or non-blocking) with configurable timeout and message filtering |
+| `bgagent_cancel` | Cancel a running task |
+| `bgagent_list` | List all tasks with optional status filter |
+| `bgagent_clear` | Abort and clear all tasks |
+| `bgagent_steer` | Send a steering message to a running task; the agent reads it at its next step and changes course |
+| `bgagent_progress` | Lightweight progress of a running task (status, phase, tool calls) without dumping its full history |
+| `bgagent_report` | Child→parent channel: send a compact status report/question to the parent session |
 
 ## Philosophy
 

@@ -8,6 +8,9 @@ import {
   createBackgroundClear,
   createBackgroundList,
   createBackgroundOutput,
+  createBackgroundProgress,
+  createBackgroundReport,
+  createBackgroundSteer,
   createBackgroundTask,
 } from "./tools";
 
@@ -45,6 +48,9 @@ export default async function plugin(ctx: PluginInput): Promise<Hooks> {
       bgagent_cancel: createBackgroundCancel(manager),
       bgagent_list: createBackgroundList(manager),
       bgagent_clear: createBackgroundClear(manager),
+      bgagent_steer: createBackgroundSteer(manager),
+      bgagent_progress: createBackgroundProgress(manager),
+      bgagent_report: createBackgroundReport(manager),
     },
     event: async () => {
       // Event handling is started in the manager constructor

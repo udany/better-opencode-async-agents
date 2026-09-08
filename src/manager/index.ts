@@ -1,6 +1,6 @@
 import type { PluginInput } from "@opencode-ai/plugin";
 import { setTaskStatus } from "../helpers";
-import { SUCCESS_MESSAGES } from "../prompts";
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../prompts";
 import { getPersistedTask, loadTasks, saveTask } from "../storage";
 import type {
   BackgroundTask,
@@ -616,6 +616,46 @@ export class BackgroundManager {
           this.getAllTasks()
         );
       });
+  }
+
+  // ===========================================================================
+  // Steer / Report (child->parent) methods
+  // ===========================================================================
+
+  /**
+   * Sends a steering message to a running/resumed task (fire-and-forget).
+   * The task's agent reads it at its next step and changes course.
+   * Does NOT touch completion state — the task keeps working and completes on its own.
+   */
+  async steerTask(task: BackgroundTask, message: string): Promise<void> {
+    resetNotificationState(task.sessionID);
+    await this.client.session.promptAsync({
+      path: { id: task.sessionID },
+      body: {
+        agent: task.agent,
+        parts: [{ type: "text", text: message }],
+      },
+    });
+  }
+
+  /**
+   * Child -> parent channel. Called from within a child/background agent.
+   * Sends a compact report/question to the task's parent session (fire-and-forget),
+   * so the parent is updated WITHOUT dumping the child's full history into its context.
+   */
+  async reportToParent(childSessionID: string, message: string): Promise<string> {
+    const task = this.tasks.get(childSessionID);
+    if (!task || !task.parentSessionID) {
+      return ERROR_MESSAGES.reportNoParent;
+    }
+    await this.client.session.promptAsync({
+      path: { id: task.parentSessionID },
+      body: {
+        agent: task.parentAgent,
+        parts: [{ type: "text", text: message }],
+      },
+    });
+    return SUCCESS_MESSAGES.reportSent(task.parentSessionID.slice(0, 8));
   }
 
   // ===========================================================================
