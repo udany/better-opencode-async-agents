@@ -49,6 +49,7 @@ describe("InstanceDiscovery", () => {
     discovery.stop();
 
     expect(publishMock).toHaveBeenCalled();
+    expect(publishMock).toHaveBeenCalledWith(expect.objectContaining({ probe: false }));
     expect(findMock).toHaveBeenCalled();
     expect(discovered).toHaveLength(1);
     expect(discovered[0]).toEqual(

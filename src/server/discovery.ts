@@ -1,5 +1,5 @@
-import type { DiscoveredInstance } from "../types";
 import { DISCOVERY_SERVICE_TYPE, DISCOVERY_TIMEOUT_MS } from "../constants";
+import type { DiscoveredInstance } from "../types";
 
 export class InstanceDiscovery {
   private bonjour: any = null;
@@ -31,6 +31,11 @@ export class InstanceDiscovery {
         type: DISCOVERY_SERVICE_TYPE,
         port,
         txt: metadata,
+        // Skip the mDNS conflict probe: it false-positives on Windows/multicast
+        // loopback ("Service name is already in use") even for a unique pid-based
+        // name, tearing down the advertisement. Announcing without a probe keeps
+        // the dashboard discoverable without the spurious error.
+        probe: false,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -50,7 +55,11 @@ export class InstanceDiscovery {
       try {
         const browser = bonjour.find({ type: DISCOVERY_SERVICE_TYPE }, (service: any) => {
           const host =
-            service.host || service.referer?.address || service.fqdn || service.addresses?.[0] || "unknown";
+            service.host ||
+            service.referer?.address ||
+            service.fqdn ||
+            service.addresses?.[0] ||
+            "unknown";
           const cleanHost = typeof host === "string" ? host.replace(/\.$/, "") : String(host);
           const key = `${cleanHost}:${service.port}`;
 
