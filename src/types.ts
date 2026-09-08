@@ -104,12 +104,14 @@ export type DiscoveredInstance = {
   directory?: string;
 };
 
-
 export interface LaunchInput {
   /** Task ID to resume (if provided, enters resume mode) */
   resume?: string;
   /** Fork parent context to child session (creates session with inherited history) */
   fork?: boolean;
+  /** Optional model override for the task session, in "provider/model-id" form.
+   *  When omitted, the task inherits the current model of the parent conversation. */
+  model?: string;
   description: string;
   prompt: string;
   agent: string;

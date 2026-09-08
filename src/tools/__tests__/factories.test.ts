@@ -72,6 +72,22 @@ describe("tool factories", () => {
       expect(launchMock).toHaveBeenCalled();
     });
 
+    test("passes an explicit model override into the launch", async () => {
+      const mockTask = createMockTask();
+      const launchMock = mock(() => Promise.resolve(mockTask));
+      const mockManager = createMockTaskManager(launchMock);
+      const tool = createBackgroundTask(mockManager);
+
+      await tool.execute(
+        { description: "test", prompt: "test prompt", agent: "explore", model: "openrouter/deepseek/deepseek-v4-flash" },
+        { sessionID: "ses", messageID: "msg", agent: "test" } as any
+      );
+
+      expect(launchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ model: "openrouter/deepseek/deepseek-v4-flash" })
+      );
+    });
+
     test("attaches child sessionId to tool part metadata for UI navigation", async () => {
       const mockTask = createMockTask();
       const launchMock = mock(() => Promise.resolve(mockTask));

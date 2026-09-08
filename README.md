@@ -48,7 +48,7 @@ This is the subagent/subtask plugin we all know and love, with some key features
 
 | Tool | Description |
 |------|-------------|
-| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, and agent type |
+| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, agent type, and optional `model` override (`provider/model-id`). Defaults to the parent conversation's model |
 | `bgagent_output` | Get task results (blocking or non-blocking) with configurable timeout and message filtering |
 | `bgagent_cancel` | Cancel a running task |
 | `bgagent_list` | List all tasks with optional status filter |

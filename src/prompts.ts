@@ -22,6 +22,7 @@ Use this for:
 Arguments:
 - resume: (Optional) Task ID to resume - if provided, enters resume mode. You can send follow-up prompts for continuous feedback.
 - fork: (Optional) If true, fork parent context to child session (child inherits conversation history of caller agent). MUST provide the expected response to it.
+- model: (Optional) Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation.
 - description: Short task description (shown in status)
 - prompt: Full detailed prompt for the agent (or follow-up message in resume mode)
 - agent: Agent type to use (any registered agent)
@@ -120,18 +121,14 @@ Task ID: \`${shortTaskId}\`
 
 You can continue working or say 'waiting' and halt.`,
 
-  taskCancelled: (
-    shortTaskId: string,
-    description: string,
-  ) => `⊘ **Task cancelled**
+  taskCancelled: (shortTaskId: string, description: string) => `⊘ **Task cancelled**
 
 Task ID: \`${shortTaskId}\`
 Description: ${description}
 Status: ⊘ cancelled`,
 
   resumeInitiated: (shortTaskId: string, resumeCount: number) => {
-    const resumeCountInfo =
-      resumeCount > 1 ? `\nResume count: ${resumeCount}` : "";
+    const resumeCountInfo = resumeCount > 1 ? `\nResume count: ${resumeCount}` : "";
     return `⏳ **Resume initiated**
 Task ID: \`${shortTaskId}\`${resumeCountInfo}
 
@@ -142,10 +139,7 @@ Follow-up prompt sent. You can continue working or say 'waiting' and halt.`;
 Task ID: \`${shortTaskId}\`
 Will execute automatically when the current run completes.`,
 
-  clearedAllTasks: (
-    runningCount: number,
-    totalCount: number,
-  ) => `✓ **Cleared all background tasks**
+  clearedAllTasks: (runningCount: number, totalCount: number) => `✓ **Cleared all background tasks**
 
 Running tasks aborted: ${runningCount}
 Total tasks cleared: ${totalCount}`,
@@ -175,22 +169,18 @@ export const ERROR_MESSAGES = {
     `Task not found: ${taskId}. Use bgagent_list to see available tasks.`,
 
   // Resume validation errors
-  taskCurrentlyResuming:
-    "Task is currently being resumed. Wait for completion.",
+  taskCurrentlyResuming: "Task is currently being resumed. Wait for completion.",
   onlyCompletedCanResume: (currentStatus: string) =>
     `Only completed tasks can be resumed. Current status: ${currentStatus}`,
-  queueFull:
-    "Task already has a pending resume queued. Wait for current execution to complete.",
-  sessionExpired:
-    "Session expired or was deleted. Start a new bgagent_task to continue.",
+  queueFull: "Task already has a pending resume queued. Wait for current execution to complete.",
+  sessionExpired: "Session expired or was deleted. Start a new bgagent_task to continue.",
 
   // Launch validation errors
   agentRequired: "Agent parameter is required. Specify which agent to use.",
   promptRequired: "Prompt is required when resuming a task",
 
   // Generic errors
-  launchFailed: (message: string) =>
-    `Failed to launch background task: ${message}`,
+  launchFailed: (message: string) => `Failed to launch background task: ${message}`,
   cancelFailed: (message: string) => `Error cancelling task: ${message}`,
   listFailed: (message: string) => `Error listing tasks: ${message}`,
   outputFailed: (message: string) => `Error getting output: ${message}`,
@@ -209,8 +199,7 @@ export const ERROR_MESSAGES = {
 
   // List empty states
   noTasksFound: "No background tasks found.",
-  noTasksWithStatus: (status: string) =>
-    `No background tasks found with status "${status}".`,
+  noTasksWithStatus: (status: string) => `No background tasks found with status "${status}".`,
   noTasksToClear: "No background tasks to clear.",
 };
 
@@ -219,8 +208,7 @@ export const ERROR_MESSAGES = {
 // =============================================================================
 
 export const WARNING_MESSAGES = {
-  resumeModeIgnoresParams:
-    "Note: agent and description are ignored in resume mode.",
+  resumeModeIgnoresParams: "Note: agent and description are ignored in resume mode.",
 };
 
 // =============================================================================
@@ -281,8 +269,7 @@ export const NOTIFICATION_MESSAGES = {
   visibleResumeFailed: (resumeCount: number, duration: string) =>
     `✗ **Resume #${resumeCount} failed in ${duration}.**`,
 
-  taskProgressLine: (completed: number, total: number) =>
-    `Task Progress: ${completed}/${total}`,
+  taskProgressLine: (completed: number, total: number) => `Task Progress: ${completed}/${total}`,
 
   devHintIndicator: "[hint attached]",
 };
@@ -305,8 +292,7 @@ Use bgagent_output tools to see agent responses.`,
     `Task failed: ${errorMessage}
 Use bgagent_output(task_id="${taskId}") for details.`,
 
-  resumeHint: (taskId: string) =>
-    `Use bgagent_output(task_id="${taskId}") for full response.`,
+  resumeHint: (taskId: string) => `Use bgagent_output(task_id="${taskId}") for full response.`,
 };
 
 // =============================================================================
@@ -331,8 +317,7 @@ export const TOAST_TITLES = {
 // =============================================================================
 
 export const STATUS_NOTES = {
-  running:
-    "\n\n> ⏳ **Running**: Task is still in progress. Check back later for results.",
+  running: "\n\n> ⏳ **Running**: Task is still in progress. Check back later for results.",
   failed: (error: string) => `\n\n> ✗ **Failed**: ${error || "Unknown error"}`,
   cancelled: "\n\n> ⊘ **Cancelled**: Task was cancelled before completion.",
 };
@@ -351,7 +336,7 @@ export const FORMAT_TEMPLATES = {
     duration: string,
     progressSection: string,
     statusNote: string,
-    promptPreview: string,
+    promptPreview: string
   ) => `# ${icon} Task Status
 
 | Field | Value |
@@ -368,12 +353,7 @@ ${statusNote}
 ${promptPreview}
 \`\`\``,
 
-  taskResult: (
-    shortTaskId: string,
-    description: string,
-    duration: string,
-    content: string,
-  ) =>
+  taskResult: (shortTaskId: string, description: string, duration: string, content: string) =>
     `✓ **Task Completed**
 
 | Field | Value |
@@ -386,12 +366,7 @@ ${promptPreview}
 
 ${content}`,
 
-  taskResultError: (
-    shortTaskId: string,
-    description: string,
-    duration: string,
-    errMsg: string,
-  ) =>
+  taskResultError: (shortTaskId: string, description: string, duration: string, errMsg: string) =>
     `Task Result
 
 Task ID: ${shortTaskId}
@@ -413,12 +388,11 @@ Error fetching messages: ${errMsg}`,
     completed: number,
     errored: number,
     cancelled: number,
-    totalToolCalls: number,
+    totalToolCalls: number
   ) =>
     `**Total: ${total}** | ⏳ ${running} running | ✓ ${completed} completed | ✗ ${errored} error | ⊘ ${cancelled} cancelled | 🔧${totalToolCalls}`,
 
-  progressSection: (tools: string[]) =>
-    `\n| Last tools | ${tools.join(" → ")} |`,
+  progressSection: (tools: string[]) => `\n| Last tools | ${tools.join(" → ")} |`,
 };
 
 // =============================================================================

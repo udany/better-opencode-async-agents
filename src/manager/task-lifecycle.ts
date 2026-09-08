@@ -9,6 +9,38 @@ import type { BackgroundTask, LaunchInput, OpencodeClient } from "../types";
  */
 const FORK_METHOD: "inject" | "native" = "inject";
 
+/**
+ * Resolves the model to use for a launched background task session.
+ * - If the caller passes `model` ("provider/model-id"), parse it into { providerID, modelID }.
+ * - Otherwise inherit the current model of the parent conversation (the session that launched
+ *   the task), so background tasks use the same model as the orchestrator by default.
+ * Returns undefined when there is no explicit override and the parent model cannot be read,
+ * letting OpenCode fall back to its default resolution.
+ */
+export async function resolveLaunchModel(
+  client: OpencodeClient,
+  input: { model?: string; parentSessionID: string }
+): Promise<{ providerID: string; modelID: string } | undefined> {
+  if (input.model) {
+    const slash = input.model.indexOf("/");
+    if (slash <= 0 || slash === input.model.length - 1) {
+      throw new Error(`Invalid model override: "${input.model}". Expected "provider/model-id".`);
+    }
+    return { providerID: input.model.slice(0, slash), modelID: input.model.slice(slash + 1) };
+  }
+  try {
+    const parent = await client.session.get({ path: { id: input.parentSessionID } });
+    const model = (parent as { data?: { model?: { providerID?: string; id?: string } } })?.data
+      ?.model;
+    if (model?.providerID && model?.id) {
+      return { providerID: model.providerID, modelID: model.id };
+    }
+  } catch {
+    // Ignore — fall back to OpenCode's default model resolution.
+  }
+  return undefined;
+}
+
 export async function launchTask(
   input: LaunchInput,
   tasks: Map<string, BackgroundTask>,
@@ -175,11 +207,14 @@ export async function launchTask(
     bgagent_report: agentToolConfig["bgagent_report"] === true,
   };
 
+  const launchModel = await resolveLaunchModel(client, input);
+
   client.session
     .promptAsync({
       path: { id: sessionID },
       body: {
         agent: input.agent,
+        ...(launchModel ? { model: launchModel } : {}),
         tools: bgagentToolOverrides,
         parts: [{ type: "text", text: input.prompt }],
       },

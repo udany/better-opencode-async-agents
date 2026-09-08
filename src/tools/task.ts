@@ -35,12 +35,25 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
     args: {
       resume: tool.schema.string().optional(),
       fork: tool.schema.boolean().optional(),
+      model: tool.schema
+        .string()
+        .optional()
+        .describe(
+          'Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation.'
+        ),
       description: tool.schema.string().nonoptional(),
       prompt: tool.schema.string().nonoptional(),
       agent: tool.schema.string().nonoptional(),
     },
     async execute(
-      args: { resume?: string; fork?: boolean; description: string; prompt: string; agent: string },
+      args: {
+        resume?: string;
+        fork?: boolean;
+        model?: string;
+        description: string;
+        prompt: string;
+        agent: string;
+      },
       toolContext
     ) {
       // =======================================================================
@@ -117,7 +130,14 @@ async function handleResumeMode(
 
 async function handleLaunchMode(
   manager: TaskManager,
-  args: { resume?: string; fork?: boolean; description: string; prompt: string; agent: string },
+  args: {
+    resume?: string;
+    fork?: boolean;
+    model?: string;
+    description: string;
+    prompt: string;
+    agent: string;
+  },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toolContext: any
 ): Promise<string> {
@@ -131,6 +151,7 @@ async function handleLaunchMode(
       prompt: args.prompt,
       agent: args.agent.trim(),
       fork: args.fork,
+      model: args.model,
       parentSessionID: toolContext.sessionID,
       parentMessageID: toolContext.messageID,
       parentAgent: toolContext.agent,
