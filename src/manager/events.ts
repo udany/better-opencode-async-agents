@@ -60,9 +60,6 @@ export function handleEvent(
     callbacks;
   const props = event.properties;
 
-  // Debug: log all events to understand what's being received
-  // console.log("[better-opencode-async-agents] Event received:", event.type, JSON.stringify(props));
-
   // Clear on session.new, session.switch, prompt.clear, or session.interrupt (ESC key)
   if (event.type === "tui.command.execute") {
     const command = props?.command as string | undefined;
@@ -78,12 +75,12 @@ export function handleEvent(
     }
   }
 
-  // Also clear if a new session is created via event
-  if (event.type === "session.created") {
-    // New session created, clear old tasks from memory
-    clearAllTasks();
-    return;
-  }
+  // NOTE: we deliberately do NOT clear tasks on `session.created`. That event fires
+  // for EVERY session creation — including the sessions this plugin creates for each
+  // bgagent_task launch — so clearing here would wipe (and abort) our own just-launched
+  // tasks from memory, orphaning them: they keep running to completion but their
+  // `session.idle` handler finds no task and never notifies the parent. Orphan cleanup
+  // is already handled by the poll loop (which clears tasks whose parent session is gone).
 
   // Clear if parent session is deleted
   if (event.type === "session.deleted") {
