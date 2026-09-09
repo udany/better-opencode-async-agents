@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { resolveLaunchModel } from "../task-lifecycle";
+import { resolveLaunchModel, resolveTitlePrefix } from "../task-lifecycle";
+
+describe("resolveTitlePrefix", () => {
+  test("uses the descriptive default when no prefix is given", () => {
+    expect(resolveTitlePrefix(undefined, false)).toBe("Background: ");
+    expect(resolveTitlePrefix(undefined, true)).toBe("Background (forked): ");
+  });
+
+  test("honors an explicit prefix verbatim", () => {
+    expect(resolveTitlePrefix("", false)).toBe("");
+    expect(resolveTitlePrefix("review: ", false)).toBe("review: ");
+  });
+});
 
 describe("resolveLaunchModel", () => {
   test("parses an explicit provider/model-id override", async () => {

@@ -112,6 +112,10 @@ export interface LaunchInput {
   /** Optional model override for the task session, in "provider/model-id" form.
    *  When omitted, the task inherits the current model of the parent conversation. */
   model?: string;
+  /** Optional session title prefix. When omitted the default ("Background: ",
+   *  or "Background (forked): " for forks) is used; when provided — including an
+   *  empty string to omit the prefix entirely — it is used verbatim. */
+  titlePrefix?: string;
   description: string;
   prompt: string;
   agent: string;

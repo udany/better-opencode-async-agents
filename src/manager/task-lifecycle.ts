@@ -41,6 +41,17 @@ export async function resolveLaunchModel(
   return undefined;
 }
 
+/**
+ * Resolves the session title prefix for a background task session.
+ * The launching agent decides via `prefix` (LaunchInput.titlePrefix): when it is
+ * undefined the descriptive defaults apply ("Background: " / "Background (forked): ");
+ * when provided — including an empty string to omit the prefix — it is used verbatim.
+ */
+export function resolveTitlePrefix(prefix: string | undefined, fork: boolean): string {
+  if (prefix === undefined) return fork ? "Background (forked): " : "Background: ";
+  return prefix;
+}
+
 export async function launchTask(
   input: LaunchInput,
   tasks: Map<string, BackgroundTask>,
@@ -55,6 +66,12 @@ export async function launchTask(
   if (!input.agent || input.agent.trim() === "") {
     throw new Error("Agent parameter is required");
   }
+
+  // Session title prefix. The caller (the launching agent) decides whether and
+  // which prefix to use via LaunchInput.titlePrefix. When omitted, fall back to
+  // the descriptive defaults below; when provided (including "" for no prefix),
+  // it wins.
+  const titlePrefix = resolveTitlePrefix(input.titlePrefix, input.fork ?? false);
 
   let sessionID: string;
 
@@ -77,7 +94,7 @@ export async function launchTask(
         path: { id: sessionID },
         body: {
           parentID: input.parentSessionID,
-          title: `Background (forked): ${input.description}`,
+          title: `${titlePrefix}${input.description}`,
         },
       })
       .catch(() => {});
@@ -107,9 +124,7 @@ export async function launchTask(
     // manager (task.parentSessionID), not by the session's parent_id.
     const createResult = await client.session.create({
       body: {
-        title: input.fork
-          ? `Background (forked): ${input.description}`
-          : `Background: ${input.description}`,
+        title: `${titlePrefix}${input.description}`,
       },
     });
 

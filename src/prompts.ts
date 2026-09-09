@@ -23,6 +23,7 @@ Arguments:
 - resume: (Optional) Task ID to resume - if provided, enters resume mode. You can send follow-up prompts for continuous feedback.
 - fork: (Optional) If true, fork parent context to child session (child inherits conversation history of caller agent). MUST provide the expected response to it.
 - model: (Optional) Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation.
+- prefix: (Optional) Session title prefix. When omitted the default ("Background: ") is used. Pass "" for no prefix, or any custom prefix you want.
 - description: Short task description (shown in status)
 - prompt: Full detailed prompt for the agent (or follow-up message in resume mode)
 - agent: Agent type to use (any registered agent)

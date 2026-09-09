@@ -41,6 +41,12 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
         .describe(
           'Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation.'
         ),
+      prefix: tool.schema
+        .string()
+        .optional()
+        .describe(
+          'Session title prefix. When omitted the default ("Background: ") is used. Pass "" for no prefix, or any custom prefix you want.'
+        ),
       description: tool.schema.string().nonoptional(),
       prompt: tool.schema.string().nonoptional(),
       agent: tool.schema.string().nonoptional(),
@@ -50,6 +56,7 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
         resume?: string;
         fork?: boolean;
         model?: string;
+        prefix?: string;
         description: string;
         prompt: string;
         agent: string;
@@ -134,6 +141,7 @@ async function handleLaunchMode(
     resume?: string;
     fork?: boolean;
     model?: string;
+    prefix?: string;
     description: string;
     prompt: string;
     agent: string;
@@ -152,6 +160,7 @@ async function handleLaunchMode(
       agent: args.agent.trim(),
       fork: args.fork,
       model: args.model,
+      titlePrefix: args.prefix,
       parentSessionID: toolContext.sessionID,
       parentMessageID: toolContext.messageID,
       parentAgent: toolContext.agent,
