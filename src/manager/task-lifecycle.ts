@@ -208,8 +208,10 @@ export async function launchTask(
   startPolling();
 
   // Fetch agent config to check for explicit bgagent tool overrides.
-  // Default: all bgagent tools are blocked for spawned agents.
-  // Override: if the agent's config explicitly sets a bgagent tool to true, honor it.
+  // Default: orchestration tools (task/cancel/clear/steer/progress/rename) are
+  // blocked for spawned agents to prevent recursion. bgagent_report is the
+  // child->parent channel, so it is enabled by default; an agent opts out by
+  // setting it to false explicitly.
   const configResult = await client.config.get();
   const agentToolConfig = configResult.data?.agent?.[input.agent]?.tools ?? {};
   const bgagentToolOverrides = {
@@ -220,7 +222,7 @@ export async function launchTask(
     bgagent_clear: agentToolConfig["bgagent_clear"] === true,
     bgagent_steer: agentToolConfig["bgagent_steer"] === true,
     bgagent_progress: agentToolConfig["bgagent_progress"] === true,
-    bgagent_report: agentToolConfig["bgagent_report"] === true,
+    bgagent_report: agentToolConfig["bgagent_report"] !== false,
     bgagent_rename: agentToolConfig["bgagent_rename"] === true,
     bgagent_finish: agentToolConfig["bgagent_finish"] === true,
   };

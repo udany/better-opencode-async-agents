@@ -110,7 +110,8 @@ parent instead of outputting a huge context dump.
 Arguments:
 - message: The report/question text (keep it concise)
 
-Requires the child agent's config to enable bgagent_report.`,
+Available to background tasks by default; an agent can disable it by setting
+bgagent_report: false in its config.`,
   backgroundRename: `Rename a session.
 
 - Called by the orchestrator: pass \`task_id\` to rename that background task's session.
