@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { ERROR_MESSAGES } from "../../prompts";
 import type { BackgroundTask } from "../../types";
-import { executeResume, type ResumeManager, validateResumeTask } from "../resume";
+import { type ResumeManager, executeResume, validateResumeTask } from "../resume";
 
 const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask => ({
   sessionID: "ses_test123",
@@ -16,12 +16,13 @@ const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask
   batchId: "batch_123",
   resumeCount: 0,
   isForked: false,
+  kind: "autonomous",
   ...overrides,
 });
 
-const createMockResumeManager = (task: BackgroundTask | undefined) => {
+const createMockResumeManager = (task: BackgroundTask | undefined, sessionExists = true) => {
   const persistTask = mock(async () => {});
-  const checkSessionExists = mock(async () => true);
+  const checkSessionExists = mock(async () => sessionExists);
   const sendResumePromptAsync = mock(async () => {});
 
   const manager: ResumeManager = {
@@ -34,16 +35,11 @@ const createMockResumeManager = (task: BackgroundTask | undefined) => {
     sendResumePromptAsync,
   };
 
-  return {
-    manager,
-    persistTask,
-    checkSessionExists,
-    sendResumePromptAsync,
-  };
+  return { manager, persistTask, checkSessionExists, sendResumePromptAsync };
 };
 
 describe("resume helpers", () => {
-  test("resume from error status validates and resumes", async () => {
+  test("resume from a finished (error) task reactivates and sends the follow-up", async () => {
     const task = createMockTask({ status: "error", error: "previous failure" });
     const { manager, sendResumePromptAsync } = createMockResumeManager(task);
 
@@ -57,81 +53,61 @@ describe("resume helpers", () => {
     expect(sendResumePromptAsync).toHaveBeenCalledTimes(1);
   });
 
-  test("resume from cancelled status validates and resumes", async () => {
-    const task = createMockTask({ status: "cancelled" });
-    const { manager, sendResumePromptAsync } = createMockResumeManager(task);
-
-    const validation = await validateResumeTask(manager, task.sessionID);
-    expect(validation.valid).toBe(true);
-
-    const result = await executeResume(manager, task, "retry cancelled work", {});
-    expect(result.success).toBe(true);
-    expect(task.status).toBe("resumed");
-    expect(task.resumeCount).toBe(1);
-    expect(sendResumePromptAsync).toHaveBeenCalledTimes(1);
-  });
-
-  test("resume from running status queues pending resume", async () => {
-    const task = createMockTask({ status: "running" });
-    const { manager, sendResumePromptAsync, persistTask } = createMockResumeManager(task);
-
-    const validation = await validateResumeTask(manager, task.sessionID);
-    expect(validation.valid).toBe(true);
-
-    const result = await executeResume(manager, task, "queue follow-up", {});
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.message.toLowerCase()).toContain("queue");
-    }
-    expect(task.status).toBe("running");
-    expect(task.pendingResume).toEqual(expect.objectContaining({ prompt: "queue follow-up" }));
-    expect(sendResumePromptAsync).toHaveBeenCalledTimes(0);
-    expect(persistTask).toHaveBeenCalledTimes(1);
-  });
-
-  test("queue-full rejection for running task with existing pending resume", async () => {
-    const task = createMockTask({
-      status: "running",
-      pendingResume: {
-        prompt: "already queued",
-        queuedAt: new Date().toISOString(),
-      },
-    });
-    const { manager, sendResumePromptAsync } = createMockResumeManager(task);
-
-    const validation = await validateResumeTask(manager, task.sessionID);
-    expect(validation.valid).toBe(true);
-
-    const result = await executeResume(manager, task, "second queued prompt", {});
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.toLowerCase()).toContain("queue");
-    }
-    expect(sendResumePromptAsync).toHaveBeenCalledTimes(0);
-  });
-
-  test("resumed status is still rejected during validation", async () => {
-    const task = createMockTask({ status: "resumed", resumeCount: 1 });
-    const { manager } = createMockResumeManager(task);
-
-    const validation = await validateResumeTask(manager, task.sessionID);
-    expect(validation.valid).toBe(false);
-    if (!validation.valid) {
-      expect(validation.error).toBe(ERROR_MESSAGES.taskCurrentlyResuming);
-    }
-  });
-
-  test("completed status remains resumable for backward compatibility", async () => {
+  test("resume from completed reactivates and sends the follow-up", async () => {
     const task = createMockTask({ status: "completed" });
     const { manager, sendResumePromptAsync } = createMockResumeManager(task);
-
-    const validation = await validateResumeTask(manager, task.sessionID);
-    expect(validation.valid).toBe(true);
 
     const result = await executeResume(manager, task, "continue completed task", {});
     expect(result.success).toBe(true);
     expect(task.status).toBe("resumed");
     expect(task.resumeCount).toBe(1);
     expect(sendResumePromptAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("resume while running sends immediately without queueing", async () => {
+    const task = createMockTask({ status: "running" });
+    const { manager, sendResumePromptAsync } = createMockResumeManager(task);
+
+    const result = await executeResume(manager, task, "inject follow-up", {});
+    expect(result.success).toBe(true);
+    expect(task.status).toBe("running");
+    expect(task.resumeCount).toBe(1);
+    expect(sendResumePromptAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("an already-resumed task can be resumed again (no lock)", async () => {
+    const task = createMockTask({ status: "resumed", resumeCount: 1 });
+    const { manager, sendResumePromptAsync } = createMockResumeManager(task);
+
+    const validation = await validateResumeTask(manager, task.sessionID);
+    expect(validation.valid).toBe(true);
+
+    const result = await executeResume(manager, task, "another follow-up", {});
+    expect(result.success).toBe(true);
+    expect(task.resumeCount).toBe(2);
+    expect(sendResumePromptAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("expired session fails without reactivating", async () => {
+    const task = createMockTask({ status: "completed" });
+    const { manager, sendResumePromptAsync } = createMockResumeManager(task, false);
+
+    const result = await executeResume(manager, task, "resume gone session", {});
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe(ERROR_MESSAGES.sessionExpired);
+    expect(task.status).toBe("completed");
+    expect(sendResumePromptAsync).toHaveBeenCalledTimes(0);
+  });
+
+  test("a send failure marks the task as error", async () => {
+    const task = createMockTask({ status: "completed" });
+    const { manager, sendResumePromptAsync } = createMockResumeManager(task);
+    sendResumePromptAsync.mockImplementation(async () => {
+      throw new Error("boom");
+    });
+
+    const result = await executeResume(manager, task, "resume", {});
+    expect(result.success).toBe(false);
+    expect(task.status).toBe("error");
   });
 });

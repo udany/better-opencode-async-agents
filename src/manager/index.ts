@@ -13,13 +13,7 @@ import type {
 } from "../types";
 import { handleEvent, startEventSubscription } from "./events";
 import { filterMessages } from "./messages";
-import {
-  notifyParentSession,
-  notifyResumeComplete,
-  notifyResumeError,
-  resetNotificationState,
-  showProgressToast,
-} from "./notifications";
+import { notifyParentSession, resetNotificationState, showProgressToast } from "./notifications";
 import { pollRunningTasks, startPolling, stopPolling, updateTaskProgress } from "./polling";
 import {
   cancelTask,
@@ -457,80 +451,18 @@ export class BackgroundManager {
     return results;
   }
 
-  async sendResumePrompt(
-    task: BackgroundTask,
-    message: string,
-    timeoutMs: number
-  ): Promise<string> {
-    // Reset notification state for resumed task
-    resetNotificationState(task.sessionID);
-
-    // Get initial message count to detect new responses
-    const initialMessages = await this.getTaskMessages(task.sessionID);
-    const initialAssistantCount = initialMessages.filter(
-      (m) => m.info?.role === "assistant"
-    ).length;
-
-    await this.client.session.promptAsync({
-      path: { id: task.sessionID },
-      body: {
-        agent: task.agent,
-        parts: [{ type: "text", text: message }],
-      },
-    });
-
-    const startTime = Date.now();
-    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    while (Date.now() - startTime < timeoutMs) {
-      await delay(500);
-
-      const statusResult = await this.client.session.status();
-      const allStatuses = (statusResult.data ?? {}) as Record<string, { type: string }>;
-      const sessionStatus = allStatuses[task.sessionID];
-
-      // Check if session is idle OR if session isn't in status (fallback)
-      const shouldCheckMessages = sessionStatus?.type === "idle" || !sessionStatus;
-
-      if (shouldCheckMessages) {
-        const messages = await this.getTaskMessages(task.sessionID);
-        const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
-
-        // Check if we have a new assistant response
-        if (assistantMessages.length > initialAssistantCount) {
-          const lastMessage = assistantMessages[assistantMessages.length - 1];
-          const textParts = lastMessage?.parts?.filter((p) => p.type === "text") ?? [];
-          const textContent = textParts
-            .map((p) => p.text ?? "")
-            .filter((text) => text.length > 0)
-            .join("\n");
-          return SUCCESS_MESSAGES.resumeResponse(task.resumeCount, textContent);
-        }
-
-        // If session is explicitly idle but no new messages, return
-        if (sessionStatus?.type === "idle") {
-          return SUCCESS_MESSAGES.resumeResponseNoContent(task.resumeCount);
-        }
-      }
-    }
-
-    throw new Error(`Timeout waiting for resume response (${timeoutMs}ms)`);
-  }
-
   async sendResumePromptAsync(
     task: BackgroundTask,
     message: string,
-    toolContext: { sessionID: string; messageID: string; agent: string }
+    _toolContext?: { sessionID: string; messageID: string; agent: string }
   ): Promise<void> {
-    // Reset notification state so the resumed task can send a new completion notification
+    // Reset notification state so the resumed task can send a fresh completion
+    // notification when its resumed turn finishes.
     resetNotificationState(task.sessionID);
 
-    // Get initial message count to detect new responses
-    const initialMessages = await this.getTaskMessages(task.sessionID);
-    const initialAssistantCount = initialMessages.filter(
-      (m) => m.info?.role === "assistant"
-    ).length;
-
+    // Non-blocking: inject the follow-up. Completion is detected by the normal
+    // session.idle/poll path — resume never waits synchronously and never
+    // invents a timeout (which previously produced spurious "failed" notices).
     this.client.session
       .promptAsync({
         path: { id: task.sessionID },
@@ -539,81 +471,8 @@ export class BackgroundManager {
           parts: [{ type: "text", text: message }],
         },
       })
-      .then(async () => {
-        const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-        let attempts = 0;
-        const maxAttempts = 600;
-
-        while (attempts < maxAttempts) {
-          await delay(1000);
-          attempts++;
-
-          try {
-            const statusResult = await this.client.session.status();
-            const allStatuses = (statusResult.data ?? {}) as Record<string, { type: string }>;
-            const sessionStatus = allStatuses[task.sessionID];
-
-            // Check if session is idle OR if session isn't in status (fallback)
-            const shouldCheckMessages = sessionStatus?.type === "idle" || !sessionStatus;
-
-            if (shouldCheckMessages) {
-              const messages = await this.getTaskMessages(task.sessionID);
-              const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
-
-              // Check if we have a new assistant response
-              if (assistantMessages.length > initialAssistantCount) {
-                setTaskStatus(task, "completed");
-                await this.persistTask(task);
-                await notifyResumeComplete(
-                  task,
-                  this.client,
-                  this.directory,
-                  toolContext,
-                  (sessionID) => this.getTaskMessages(sessionID),
-                  () => this.getAllTasks()
-                );
-                return;
-              }
-
-              // If session is explicitly idle but no new messages, keep waiting (might still be processing)
-              if (sessionStatus?.type === "idle" && attempts > 5) {
-                // After 5 attempts with idle status and no new messages, consider it done
-                setTaskStatus(task, "completed");
-                await this.persistTask(task);
-                await notifyResumeComplete(
-                  task,
-                  this.client,
-                  this.directory,
-                  toolContext,
-                  (sessionID) => this.getTaskMessages(sessionID),
-                  () => this.getAllTasks()
-                );
-                return;
-              }
-            }
-          } catch {
-            // Ignore status check errors
-          }
-        }
-
-        setTaskStatus(task, "completed");
-        await this.persistTask(task);
-        await notifyResumeError(
-          task,
-          "Timeout waiting for response",
-          this.client,
-          this.directory,
-          toolContext,
-          () => this.getAllTasks()
-        );
-      })
-      .catch(async (error) => {
-        setTaskStatus(task, "completed");
-        await this.persistTask(task);
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        await notifyResumeError(task, errorMsg, this.client, this.directory, toolContext, () =>
-          this.getAllTasks()
-        );
+      .catch(() => {
+        // Ignore — the task's idle/error detection handles the outcome.
       });
   }
 

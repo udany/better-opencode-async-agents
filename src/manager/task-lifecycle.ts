@@ -350,8 +350,7 @@ export async function checkAndUpdateTaskStatus(
     eventType: "task.completed" | "task.error" | "task.cancelled",
     task: BackgroundTask
   ) => void,
-  persistTask?: (task: BackgroundTask) => Promise<void>,
-  sendPendingResumeAsync?: (task: BackgroundTask, prompt: string) => Promise<void>
+  persistTask?: (task: BackgroundTask) => Promise<void>
 ): Promise<BackgroundTask> {
   if (task.status !== "running") {
     return task;
@@ -366,17 +365,6 @@ export async function checkAndUpdateTaskStatus(
     task.status = "completed";
     task.completedAt = new Date().toISOString();
     emitTaskEvent?.("task.completed", task);
-
-    if (task.pendingResume && sendPendingResumeAsync) {
-      const { prompt } = task.pendingResume;
-      task.pendingResume = undefined;
-      task.status = "resumed";
-      task.resumeCount++;
-      if (persistTask) {
-        await persistTask(task);
-      }
-      sendPendingResumeAsync(task, prompt).catch(() => {});
-    }
 
     if (!skipNotification) {
       notifyParentSession(task);

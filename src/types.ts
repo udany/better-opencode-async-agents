@@ -47,7 +47,6 @@ export interface PersistedTask {
   progress?: TaskProgress;
   startedAt?: string;
   batchId?: string;
-  pendingResume?: { prompt: string; queuedAt: string };
   /** Task kind. "interactive" sessions complete only via bgagent_finish, not on idle. */
   kind?: TaskKind;
 }
@@ -76,7 +75,6 @@ export interface BackgroundTask {
   isForked: boolean;
   /** Task kind. "interactive" sessions complete only when the agent calls bgagent_finish. */
   kind: TaskKind;
-  pendingResume?: { prompt: string; queuedAt: string };
 }
 
 export interface MessageFilter {

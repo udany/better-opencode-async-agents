@@ -54,23 +54,24 @@ export async function validateResumeTask(
     };
   }
 
-  if (task.status === "resumed") {
-    return {
-      valid: false,
-      error: ERROR_MESSAGES.taskCurrentlyResuming,
-    };
-  }
-
-
+  // Any task can be (re)resumed — including one already running or already
+  // resumed: another follow-up is just injected. No "currently resuming" lock.
   return { valid: true, task };
 }
 
 /**
- * Executes the resume operation on a validated task
+ * Executes the resume operation on a validated task.
+ *
+ * Non-blocking: it injects the follow-up prompt into the task's session and
+ * returns immediately. Completion is detected by the normal idle/poll path —
+ * resume never waits synchronously and never invents a timeout. For a still
+ * running task the follow-up is picked up like a steering message; for a
+ * finished task it starts a new turn.
+ *
  * @param manager - BackgroundManager instance
  * @param task - The task to resume (must be validated first)
  * @param prompt - The follow-up prompt to send
- * @param toolContext - Tool context for notifications
+ * @param toolContext - Tool context (unused for waiting; kept for notifications)
  * @returns Success message or error message
  */
 export async function executeResume(
@@ -80,59 +81,29 @@ export async function executeResume(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toolContext: any
 ): Promise<{ success: true; message: string } | { success: false; error: string }> {
-  if (task.status === "running") {
-    if (task.pendingResume) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.queueFull,
-      };
-    }
+  const wasRunning = task.status === "running";
 
-    task.pendingResume = {
-      prompt,
-      queuedAt: new Date().toISOString(),
-    };
-    await manager.persistTask(task);
-
-    return {
-      success: true,
-      message: SUCCESS_MESSAGES.resumeQueued(shortId(task.sessionID)),
-    };
-  }
-
-  // Set status to resumed and increment count
-  setTaskStatus(task, "resumed");
-  task.resumeCount++;
-  await manager.persistTask(task);
-
-  try {
-    // Verify session still exists
+  if (!wasRunning) {
+    // Verify the session still exists before re-activating a finished task.
     const sessionExists = await manager.checkSessionExists(task.sessionID);
     if (!sessionExists) {
-      setTaskStatus(task, "completed"); // Revert status
-      await manager.persistTask(task);
-      return {
-        success: false,
-        error: ERROR_MESSAGES.sessionExpired,
-      };
+      return { success: false, error: ERROR_MESSAGES.sessionExpired };
     }
+    setTaskStatus(task, "resumed");
+  }
+  task.resumeCount++;
 
-    // Fire async resume - notification will be sent when complete
-    manager.sendResumePromptAsync(task, prompt, toolContext);
-
+  try {
+    await manager.sendResumePromptAsync(task, prompt, toolContext);
+    await manager.persistTask(task);
     return {
       success: true,
       message: SUCCESS_MESSAGES.resumeInitiated(shortId(task.sessionID), task.resumeCount),
     };
   } catch (error) {
-    // On error, set status to error (per spec)
     const errorMsg = error instanceof Error ? error.message : String(error);
     setTaskStatus(task, "error", { error: errorMsg });
     await manager.persistTask(task);
-
-    return {
-      success: false,
-      error: ERROR_MESSAGES.resumeFailed(errorMsg),
-    };
+    return { success: false, error: ERROR_MESSAGES.resumeFailed(errorMsg) };
   }
 }

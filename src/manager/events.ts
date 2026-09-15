@@ -119,16 +119,11 @@ export function handleEvent(
     // going idle just means "waiting for the user", so never auto-complete them.
     if (task.kind === "interactive") return;
 
-    // For resumed tasks, do NOT send notifyParentSession - the resume handler
-    // (sendResumePromptAsync) will send notifyResumeComplete instead
-    if (task.status === "resumed") {
-      // Just mark as completed, the resume async handler will detect this
-      // and send the appropriate resume notification
-      return;
-    }
-
-    // Only handle running tasks (not resumed)
-    if (task.status !== "running") return;
+    // Complete running and resumed tasks on idle. Resumed tasks are deliberately
+    // NOT completed by the poll loop (its "missing status + existing assistant
+    // message" fallback would false-complete them), so the idle event is their
+    // completion signal.
+    if (task.status !== "running" && task.status !== "resumed") return;
 
     setTaskStatus(task, "completed", { persistFn: persistTask, emitFn: emitTaskEvent });
     // Trigger notification immediately on event-based completion

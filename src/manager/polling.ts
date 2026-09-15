@@ -113,8 +113,10 @@ export async function pollRunningTasks(
       // Handle both running and resumed tasks
       if (task.status !== "running" && task.status !== "resumed") continue;
 
-      // For resumed tasks, skip polling-based completion detection entirely.
-      // The sendResumePromptAsync handler manages completion and notification for resumes.
+      // For resumed tasks, skip polling-based completion entirely: the poll's
+      // "missing status + existing assistant message" fallback would false-complete
+      // them (a resumed task already has assistant messages). Their completion is
+      // detected by the session.idle event instead.
       if (task.status === "resumed") {
         await updateTaskProgress(task);
         continue;

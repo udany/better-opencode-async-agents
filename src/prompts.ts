@@ -155,20 +155,10 @@ Task ID: \`${shortTaskId}\`${resumeCountInfo}
 Follow-up prompt sent. You can continue working or say 'waiting' and halt.`;
   },
 
-  resumeQueued: (shortTaskId: string) => `⏳ **Resume queued**
-Task ID: \`${shortTaskId}\`
-Will execute automatically when the current run completes.`,
-
   clearedAllTasks: (runningCount: number, totalCount: number) => `✓ **Cleared all background tasks**
 
 Running tasks aborted: ${runningCount}
 Total tasks cleared: ${totalCount}`,
-
-  resumeResponse: (resumeCount: number, textContent: string) =>
-    `✓ **Resume Response** (count: ${resumeCount})\n\n${textContent || "(No text response)"}`,
-
-  resumeResponseNoContent: (resumeCount: number) =>
-    `✓ **Resume Response** (count: ${resumeCount})\n\n(No response found)`,
 
   steerInitiated: (shortTaskId: string) => `⏳ **Steering message sent**
 Task ID: \`${shortTaskId}\`
@@ -196,10 +186,6 @@ export const ERROR_MESSAGES = {
     `Task not found: ${taskId}. Use bgagent_list to see available tasks.`,
 
   // Resume validation errors
-  taskCurrentlyResuming: "Task is currently being resumed. Wait for completion.",
-  onlyCompletedCanResume: (currentStatus: string) =>
-    `Only completed tasks can be resumed. Current status: ${currentStatus}`,
-  queueFull: "Task already has a pending resume queued. Wait for current execution to complete.",
   sessionExpired: "Session expired or was deleted. Start a new bgagent_task to continue.",
 
   // Launch validation errors

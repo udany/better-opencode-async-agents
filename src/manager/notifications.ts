@@ -1,4 +1,9 @@
-import { COMPLETION_DISPLAY_DURATION, STREAMING_FRAMES, WAITING_FRAMES, TOOL_FRAMES } from "../constants";
+import {
+  COMPLETION_DISPLAY_DURATION,
+  STREAMING_FRAMES,
+  TOOL_FRAMES,
+  WAITING_FRAMES,
+} from "../constants";
 import { shortId } from "../helpers";
 import {
   NOTIFICATION_MESSAGES,
@@ -81,7 +86,6 @@ export function showProgressToast(
     (t) => t.status === "completed" || t.status === "error" || t.status === "cancelled"
   ).length;
 
-
   const totalToolCalls = batchTasks.reduce((sum, t) => sum + (t.progress?.toolCalls ?? 0), 0);
 
   // Aggregate tool calls by name across batch tasks
@@ -131,7 +135,8 @@ export function showProgressToast(
       new Date(task.startedAt),
       task.completedAt ? new Date(task.completedAt) : undefined
     );
-    const statusIcon = task.status === "completed" ? "✓ ▰▰▰" : task.status === "error" ? "✗ ▱▱▱" : "⊘";
+    const statusIcon =
+      task.status === "completed" ? "✓ ▰▰▰" : task.status === "error" ? "✗ ▱▱▱" : "⊘";
     const callCount = task.progress?.toolCalls ?? 0;
     const callsStr = callCount > 0 ? ` 🔧${callCount}` : "";
     taskLines.push(
@@ -169,7 +174,9 @@ export function showProgressToast(
 
   const hasRunning = runningTasks.filter((t) => t.batchId === activeBatchId).length > 0;
   const firstRunningTask = runningTasks.filter((t) => t.batchId === activeBatchId)[0];
-  const titleIcon = firstRunningTask ? (STREAMING_FRAMES[firstRunningTask.progress?.brailleFrame ?? 0] ?? "⠋") : "⏳";
+  const titleIcon = firstRunningTask
+    ? (STREAMING_FRAMES[firstRunningTask.progress?.brailleFrame ?? 0] ?? "⠋")
+    : "⏳";
   const title = hasRunning
     ? TOAST_TITLES.backgroundTasksRunning(titleIcon)
     : TOAST_TITLES.tasksComplete;
@@ -336,130 +343,6 @@ export function resetNotificationState(taskSessionID: string): void {
     clearTimeout(state.timer);
   }
   notifyStateMap.delete(taskSessionID);
-}
-
-/**
- * Notifies the parent session when a resume operation completes successfully.
- */
-export async function notifyResumeComplete(
-  task: BackgroundTask,
-  client: OpencodeClient,
-  directory: string,
-  toolContext: { sessionID: string; agent: string },
-  getTaskMessages: (sessionID: string) => Promise<
-    Array<{
-      info?: { role?: string };
-      parts?: Array<{ type?: string; text?: string }>;
-    }>
-  >,
-  getTasksArray?: () => BackgroundTask[]
-): Promise<void> {
-  try {
-    // Calculate duration
-    const duration = formatDuration(
-      new Date(task.startedAt),
-      task.completedAt ? new Date(task.completedAt) : undefined
-    );
-
-    // Calculate batch progress if available
-    let completedTasks = 1;
-    let totalTasks = 1;
-    let runningTasks = 0;
-    if (getTasksArray) {
-      const batchTasks = getTasksArray().filter((t) => t.batchId === task.batchId);
-      totalTasks = batchTasks.length;
-      completedTasks = batchTasks.filter(
-        (t) => t.status === "completed" || t.status === "error" || t.status === "cancelled"
-      ).length;
-      runningTasks = batchTasks.filter((t) => t.status === "running").length;
-    }
-
-    // Build visible message
-    const visibleStatus = NOTIFICATION_MESSAGES.visibleResumeCompleted(task.resumeCount, duration);
-    const progressLine = NOTIFICATION_MESSAGES.taskProgressLine(completedTasks, totalTasks);
-    const devIndicator =
-      process.env.SUPERAGENTS_DEBUG === "1" ? ` ${NOTIFICATION_MESSAGES.devHintIndicator}` : "";
-    const visibleMessage = `${visibleStatus}\n${progressLine}${devIndicator}`;
-
-    // Build hidden hint
-    const taskShortId = shortId(task.sessionID);
-    const hiddenHint =
-      runningTasks > 0
-        ? SYSTEM_HINT_MESSAGES.runningTasksHint(taskShortId)
-        : SYSTEM_HINT_MESSAGES.resumeHint(taskShortId);
-
-    await client.session.prompt({
-      path: { id: toolContext.sessionID },
-      body: {
-        agent: toolContext.agent,
-        parts: [
-          { type: "text", text: visibleMessage },
-          { type: "text", text: hiddenHint, synthetic: true },
-        ],
-      },
-      query: { directory },
-    });
-  } catch {
-    // Ignore notification errors
-  }
-}
-
-/**
- * Notifies the parent session when a resume operation fails.
- */
-export async function notifyResumeError(
-  task: BackgroundTask,
-  errorMessage: string,
-  client: OpencodeClient,
-  directory: string,
-  toolContext: { sessionID: string; agent: string },
-  getTasksArray?: () => BackgroundTask[]
-): Promise<void> {
-  try {
-    // Calculate duration
-    const duration = formatDuration(
-      new Date(task.startedAt),
-      task.completedAt ? new Date(task.completedAt) : undefined
-    );
-
-    // Calculate batch progress if available
-    let completedTasks = 1;
-    let totalTasks = 1;
-    let runningTasks = 0;
-    if (getTasksArray) {
-      const batchTasks = getTasksArray().filter((t) => t.batchId === task.batchId);
-      totalTasks = batchTasks.length;
-      completedTasks = batchTasks.filter(
-        (t) => t.status === "completed" || t.status === "error" || t.status === "cancelled"
-      ).length;
-      runningTasks = batchTasks.filter((t) => t.status === "running").length;
-    }
-
-    // Build visible message
-    const visibleStatus = NOTIFICATION_MESSAGES.visibleResumeFailed(task.resumeCount, duration);
-    const progressLine = NOTIFICATION_MESSAGES.taskProgressLine(completedTasks, totalTasks);
-    const devIndicator =
-      process.env.SUPERAGENTS_DEBUG === "1" ? ` ${NOTIFICATION_MESSAGES.devHintIndicator}` : "";
-    const visibleMessage = `${visibleStatus}\n${progressLine}${devIndicator}`;
-
-    // Build hidden hint with error message
-    const taskShortId = shortId(task.sessionID);
-    const hiddenHint = SYSTEM_HINT_MESSAGES.errorHint(taskShortId, errorMessage);
-
-    await client.session.prompt({
-      path: { id: toolContext.sessionID },
-      body: {
-        agent: toolContext.agent,
-        parts: [
-          { type: "text", text: visibleMessage },
-          { type: "text", text: hiddenHint, synthetic: true },
-        ],
-      },
-      query: { directory },
-    });
-  } catch {
-    // Ignore notification errors
-  }
 }
 
 /**
