@@ -1,5 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin";
-import { setTaskStatus } from "../helpers";
+import { setTaskStatus, shortId } from "../helpers";
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../prompts";
 import { getPersistedTask, loadTasks, saveTask } from "../storage";
 import type {
@@ -12,6 +12,7 @@ import type {
   TaskProgress,
 } from "../types";
 import { handleEvent, startEventSubscription } from "./events";
+import { filterMessages } from "./messages";
 import {
   notifyParentSession,
   notifyResumeComplete,
@@ -20,7 +21,6 @@ import {
   showProgressToast,
 } from "./notifications";
 import { pollRunningTasks, startPolling, stopPolling, updateTaskProgress } from "./polling";
-import { filterMessages } from "./messages";
 import {
   cancelTask,
   checkAndUpdateTaskStatus,
@@ -148,6 +148,7 @@ export class BackgroundManager {
       status: task.status,
       resumeCount: task.resumeCount,
       isForked: task.isForked,
+      kind: task.kind,
       // Extended fields for HTTP Status API
       completedAt: task.completedAt,
       error: task.error,
@@ -336,6 +337,7 @@ export class BackgroundManager {
           batchId: "", // Not persisted
           resumeCount: persisted.resumeCount ?? 0,
           isForked: persisted.isForked ?? false,
+          kind: persisted.kind ?? "autonomous",
         };
         // Add to memory cache
         this.tasks.set(id, task);
@@ -368,10 +370,7 @@ export class BackgroundManager {
     return getTaskMessages(sessionID, this.client);
   }
 
-  async getFilteredMessages(
-    sessionID: string,
-    filter: MessageFilter
-  ): Promise<FilteredMessage[]> {
+  async getFilteredMessages(sessionID: string, filter: MessageFilter): Promise<FilteredMessage[]> {
     const rawMessages = await this.getTaskMessages(sessionID);
     return filterMessages(rawMessages, filter);
   }
@@ -656,6 +655,49 @@ export class BackgroundManager {
       },
     });
     return SUCCESS_MESSAGES.reportSent(task.parentSessionID.slice(0, 8));
+  }
+
+  /**
+   * Renames a session (by session ID) and, if it belongs to a task, keeps the
+   * task description in sync and persists it. Callable for any session — the
+   * orchestrator renames a task session, or an agent renames its own session.
+   */
+  async renameSession(sessionID: string, title: string): Promise<void> {
+    await this.client.session.update({ path: { id: sessionID }, body: { title } });
+    const task = this.tasks.get(sessionID);
+    if (task) {
+      task.description = title;
+      await this.persistTask(task);
+    }
+  }
+
+  /**
+   * Explicitly completes an interactive task (child calls bgagent_finish).
+   * Optionally hands a summary message to the parent, then notifies it.
+   */
+  async finishTask(childSessionID: string, message?: string): Promise<string> {
+    const task = this.tasks.get(childSessionID);
+    if (!task) return ERROR_MESSAGES.finishNoParent;
+    if (task.status !== "running" && task.status !== "resumed") {
+      return ERROR_MESSAGES.finishNotRunning(task.status);
+    }
+    if (message) {
+      try {
+        await this.client.session.promptAsync({
+          path: { id: task.parentSessionID },
+          body: { agent: task.parentAgent, parts: [{ type: "text", text: message }] },
+        });
+      } catch {
+        // Best-effort handoff message.
+      }
+    }
+    resetNotificationState(task.sessionID);
+    setTaskStatus(task, "completed", {
+      persistFn: (t) => void this.persistTask(t),
+      emitFn: (eventType, t) => this.emitTaskEvent(eventType, t),
+    });
+    this.notifyParentSession(task);
+    return SUCCESS_MESSAGES.finished(shortId(task.sessionID));
   }
 
   // ===========================================================================

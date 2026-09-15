@@ -8,6 +8,9 @@ export type BackgroundTaskStatus = "running" | "completed" | "error" | "cancelle
 
 export type TaskPhase = "waiting" | "streaming" | "tool";
 
+/** Task modes. */
+export type TaskKind = "autonomous" | "interactive";
+
 export interface TaskProgress {
   toolCalls: number;
   toolCallsByName: Record<string, number>;
@@ -45,6 +48,8 @@ export interface PersistedTask {
   startedAt?: string;
   batchId?: string;
   pendingResume?: { prompt: string; queuedAt: string };
+  /** Task kind. "interactive" sessions complete only via bgagent_finish, not on idle. */
+  kind?: TaskKind;
 }
 
 /**
@@ -69,6 +74,8 @@ export interface BackgroundTask {
   batchId: string;
   resumeCount: number;
   isForked: boolean;
+  /** Task kind. "interactive" sessions complete only when the agent calls bgagent_finish. */
+  kind: TaskKind;
   pendingResume?: { prompt: string; queuedAt: string };
 }
 
@@ -116,6 +123,10 @@ export interface LaunchInput {
    *  or "Background (forked): " for forks) is used; when provided — including an
    *  empty string to omit the prefix entirely — it is used verbatim. */
   titlePrefix?: string;
+  /** When true, the session is interactive: the user can see and message it,
+   *  it is NOT auto-completed on idle, and it completes only when the agent
+   *  calls bgagent_finish. */
+  interactive?: boolean;
   description: string;
   prompt: string;
   agent: string;

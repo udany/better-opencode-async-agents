@@ -24,6 +24,7 @@ Arguments:
 - fork: (Optional) If true, fork parent context to child session (child inherits conversation history of caller agent). MUST provide the expected response to it.
 - model: (Optional) Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation.
 - prefix: (Optional) Session title prefix. When omitted the default ("Background: ") is used. Pass "" for no prefix, or any custom prefix you want.
+- interactive: (Optional) If true, the session is interactive: the user can see and message it directly. It is NOT auto-completed on idle; it completes only when the agent calls bgagent_finish.
 - description: Short task description (shown in status)
 - prompt: Full detailed prompt for the agent (or follow-up message in resume mode)
 - agent: Agent type to use (any registered agent)
@@ -110,6 +111,24 @@ Arguments:
 - message: The report/question text (keep it concise)
 
 Requires the child agent's config to enable bgagent_report.`,
+  backgroundRename: `Rename a session.
+
+- Called by the orchestrator: pass \`task_id\` to rename that background task's session.
+- Called by an agent from within its own session: omit \`task_id\` to rename its own session.
+
+Use this to give sessions meaningful names (and to reflect a reused/resumed session's new purpose).
+
+Arguments:
+- title: New session title (required)
+- task_id: (Optional) Task ID to rename. When omitted, renames the caller's own session.`,
+  backgroundFinish: `Signal that an interactive session is finished and hand back to the parent.
+
+Interactive sessions (launched with interactive=true) are NOT auto-completed when they go idle —
+because idle means "waiting for the user" there. Instead, call bgagent_finish when you are truly
+done (after finishing the conversation with the user); the parent is then notified.
+
+Arguments:
+- message: (Optional) A short summary of the outcome to hand to the parent.`,
 };
 
 // =============================================================================
@@ -157,6 +176,13 @@ The agent will read it at its next step. Use bgagent_progress for live updates.`
 
   reportSent: (parentShortId: string) => `✓ **Report sent to parent**
 Parent: \`${parentShortId}\``,
+
+  renamed: (shortTaskId: string, title: string) => `✓ **Session renamed**
+Task ID: \`${shortTaskId}\`
+Title: ${title}`,
+
+  finished: (shortTaskId: string) => `✓ **Task finished** — parent notified
+Task ID: \`${shortTaskId}\``,
 };
 
 // =============================================================================
@@ -197,6 +223,12 @@ export const ERROR_MESSAGES = {
   reportFailed: (message: string) => `Error sending report: ${message}`,
   reportNoParent:
     "This session is not a background task with a parent. bgagent_report is only available to child/background agents.",
+  renameFailed: (message: string) => `Error renaming session: ${message}`,
+  finishFailed: (message: string) => `Error finishing task: ${message}`,
+  finishNotRunning: (status: string) =>
+    `Task is not running (status: ${status}); nothing to finish.`,
+  finishNoParent:
+    "This session is not a background task; bgagent_finish is only available to background task sessions.",
 
   // List empty states
   noTasksFound: "No background tasks found.",
@@ -248,6 +280,20 @@ Context processing applied:
 - ${removalStatus}
 If you need complete file contents or detailed results, re-read the files directly.`;
 }
+
+// =============================================================================
+// Interactive Session Instructions
+// =============================================================================
+
+/**
+ * Injected as a synthetic part into interactive background sessions so the child
+ * agent knows the user can see and message it, and that going idle does not mean
+ * the task is done — it must call bgagent_finish to complete.
+ */
+export const INTERACTIVE_INSTRUCTIONS = `This is an INTERACTIVE session.
+- The user can see this conversation and will send you messages directly — respond to them.
+- Going idle does NOT mean you are done; it means you are waiting for the user.
+- When the whole task is complete and you want to hand back to the parent orchestrator, call the bgagent_finish tool (optionally with a short summary).`;
 
 // =============================================================================
 // Notification Messages (sent to parent session)

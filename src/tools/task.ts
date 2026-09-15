@@ -47,6 +47,12 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
         .describe(
           'Session title prefix. When omitted the default ("Background: ") is used. Pass "" for no prefix, or any custom prefix you want.'
         ),
+      interactive: tool.schema
+        .boolean()
+        .optional()
+        .describe(
+          "Launch an interactive session: the user can see it and message it directly. It is NOT auto-completed when idle; it completes only when the agent calls bgagent_finish."
+        ),
       description: tool.schema.string().nonoptional(),
       prompt: tool.schema.string().nonoptional(),
       agent: tool.schema.string().nonoptional(),
@@ -57,6 +63,7 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
         fork?: boolean;
         model?: string;
         prefix?: string;
+        interactive?: boolean;
         description: string;
         prompt: string;
         agent: string;
@@ -142,6 +149,7 @@ async function handleLaunchMode(
     fork?: boolean;
     model?: string;
     prefix?: string;
+    interactive?: boolean;
     description: string;
     prompt: string;
     agent: string;
@@ -161,6 +169,7 @@ async function handleLaunchMode(
       fork: args.fork,
       model: args.model,
       titlePrefix: args.prefix,
+      interactive: args.interactive,
       parentSessionID: toolContext.sessionID,
       parentMessageID: toolContext.messageID,
       parentAgent: toolContext.agent,

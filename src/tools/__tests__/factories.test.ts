@@ -19,6 +19,7 @@ const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask
   batchId: "batch_123",
   resumeCount: 0,
   isForked: false,
+  kind: "autonomous",
   ...overrides,
 });
 
@@ -105,6 +106,20 @@ describe("tool factories", () => {
       );
 
       expect(launchMock).toHaveBeenCalledWith(expect.objectContaining({ titlePrefix: "" }));
+    });
+
+    test("passes the interactive flag into the launch", async () => {
+      const mockTask = createMockTask();
+      const launchMock = mock(() => Promise.resolve(mockTask));
+      const mockManager = createMockTaskManager(launchMock);
+      const tool = createBackgroundTask(mockManager);
+
+      await tool.execute(
+        { description: "test", prompt: "test prompt", agent: "explore", interactive: true },
+        { sessionID: "ses", messageID: "msg", agent: "test" } as any
+      );
+
+      expect(launchMock).toHaveBeenCalledWith(expect.objectContaining({ interactive: true }));
     });
 
     test("attaches child sessionId to tool part metadata for UI navigation", async () => {

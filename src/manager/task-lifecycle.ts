@@ -1,5 +1,5 @@
 import { type SessionMessage, formatMessagesAsContext, processMessagesForFork } from "../fork";
-import { FORK_MESSAGES, buildForkPreamble } from "../prompts";
+import { FORK_MESSAGES, INTERACTIVE_INSTRUCTIONS, buildForkPreamble } from "../prompts";
 import type { BackgroundTask, LaunchInput, OpencodeClient } from "../types";
 
 /**
@@ -178,6 +178,7 @@ export async function launchTask(
     batchId,
     resumeCount: 0,
     isForked: input.fork ?? false,
+    kind: input.interactive ? "interactive" : "autonomous",
     progress: {
       toolCalls: 0,
       toolCallsByName: {},
@@ -220,7 +221,21 @@ export async function launchTask(
     bgagent_steer: agentToolConfig["bgagent_steer"] === true,
     bgagent_progress: agentToolConfig["bgagent_progress"] === true,
     bgagent_report: agentToolConfig["bgagent_report"] === true,
+    bgagent_rename: agentToolConfig["bgagent_rename"] === true,
+    bgagent_finish: agentToolConfig["bgagent_finish"] === true,
   };
+
+  const parts: Array<{ type: "text"; text: string; synthetic?: boolean }> = [
+    { type: "text", text: input.prompt },
+  ];
+  if (input.interactive) {
+    // Interactive sessions must know the user can see/message them and that idle
+    // is not completion — they complete by calling bgagent_finish. Also make sure
+    // the child can actually call finish/rename regardless of its agent config.
+    bgagentToolOverrides.bgagent_finish = true;
+    bgagentToolOverrides.bgagent_rename = true;
+    parts.push({ type: "text", text: INTERACTIVE_INSTRUCTIONS, synthetic: true });
+  }
 
   const launchModel = await resolveLaunchModel(client, input);
 
@@ -231,7 +246,7 @@ export async function launchTask(
         agent: input.agent,
         ...(launchModel ? { model: launchModel } : {}),
         tools: bgagentToolOverrides,
-        parts: [{ type: "text", text: input.prompt }],
+        parts,
       },
     })
     .catch((error) => {
@@ -339,6 +354,11 @@ export async function checkAndUpdateTaskStatus(
   sendPendingResumeAsync?: (task: BackgroundTask, prompt: string) => Promise<void>
 ): Promise<BackgroundTask> {
   if (task.status !== "running") {
+    return task;
+  }
+
+  // Interactive sessions complete only via bgagent_finish, never on idle.
+  if (task.kind === "interactive") {
     return task;
   }
 

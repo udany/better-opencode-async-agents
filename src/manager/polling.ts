@@ -1,4 +1,10 @@
-import { COMPLETION_DISPLAY_DURATION, STREAMING_FRAMES, WAITING_FRAMES, WAITING_FRAME_INTERVAL, TOOL_FRAMES } from "../constants";
+import {
+  COMPLETION_DISPLAY_DURATION,
+  STREAMING_FRAMES,
+  TOOL_FRAMES,
+  WAITING_FRAMES,
+  WAITING_FRAME_INTERVAL,
+} from "../constants";
 import { setTaskStatus } from "../helpers";
 import type { BackgroundTask, OpencodeClient, TaskPhase } from "../types";
 
@@ -110,6 +116,13 @@ export async function pollRunningTasks(
       // For resumed tasks, skip polling-based completion detection entirely.
       // The sendResumePromptAsync handler manages completion and notification for resumes.
       if (task.status === "resumed") {
+        await updateTaskProgress(task);
+        continue;
+      }
+
+      // Interactive sessions complete only via bgagent_finish, not on idle
+      // (idle = waiting for the user). Keep tracking progress instead.
+      if (task.kind === "interactive") {
         await updateTaskProgress(task);
         continue;
       }
@@ -274,7 +287,8 @@ export async function updateTaskProgress(
 
     // Auto-advance braille spinner every poll for active phases.
     if (phase !== "waiting") {
-      task.progress.brailleFrame = ((task.progress.brailleFrame ?? 0) + 1) % STREAMING_FRAMES.length;
+      task.progress.brailleFrame =
+        ((task.progress.brailleFrame ?? 0) + 1) % STREAMING_FRAMES.length;
     }
 
     // Advance progress bar on state-change events only.
@@ -284,7 +298,8 @@ export async function updateTaskProgress(
     const hasEvent =
       phase !== prevPhase || toolCalls !== prevToolCalls || totalTextCharCount !== prevTextChars;
     if (hasEvent && phase !== "waiting") {
-      task.progress.progressBarFrame = ((task.progress.progressBarFrame ?? 0) + 1) % TOOL_FRAMES.length;
+      task.progress.progressBarFrame =
+        ((task.progress.progressBarFrame ?? 0) + 1) % TOOL_FRAMES.length;
     }
     task.progress._prevPhase = phase;
 
@@ -293,7 +308,8 @@ export async function updateTaskProgress(
       const waitPollCount = (task.progress._waitPollCount ?? 0) + 1;
       task.progress._waitPollCount = waitPollCount;
       if (waitPollCount >= WAITING_FRAME_INTERVAL) {
-        task.progress.waitingFrame = ((task.progress.waitingFrame ?? 0) + 1) % WAITING_FRAMES.length;
+        task.progress.waitingFrame =
+          ((task.progress.waitingFrame ?? 0) + 1) % WAITING_FRAMES.length;
         task.progress._waitPollCount = 0;
       }
     } else {

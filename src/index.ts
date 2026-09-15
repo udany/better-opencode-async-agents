@@ -6,9 +6,11 @@ import { StatusApiServer } from "./server";
 import {
   createBackgroundCancel,
   createBackgroundClear,
+  createBackgroundFinish,
   createBackgroundList,
   createBackgroundOutput,
   createBackgroundProgress,
+  createBackgroundRename,
   createBackgroundReport,
   createBackgroundSteer,
   createBackgroundTask,
@@ -31,7 +33,11 @@ export default async function plugin(ctx: PluginInput): Promise<Hooks> {
   const manager = new BackgroundManager(ctx);
 
   // Start HTTP Status API server
-  const server = await StatusApiServer.start(manager, { instanceId, instanceName, directory: ctx.directory });
+  const server = await StatusApiServer.start(manager, {
+    instanceId,
+    instanceName,
+    directory: ctx.directory,
+  });
   if (server) {
     const cleanup = () => {
       server.stop();
@@ -51,6 +57,8 @@ export default async function plugin(ctx: PluginInput): Promise<Hooks> {
       bgagent_steer: createBackgroundSteer(manager),
       bgagent_progress: createBackgroundProgress(manager),
       bgagent_report: createBackgroundReport(manager),
+      bgagent_rename: createBackgroundRename(manager),
+      bgagent_finish: createBackgroundFinish(manager),
     },
     event: async () => {
       // Event handling is started in the manager constructor

@@ -42,13 +42,17 @@ This is the subagent/subtask plugin we all know and love, with some key features
 
 - **Inspectable Sessions**: Each background task runs as a normal conversation in the UI, so you can open and watch it live.
 
+- **Interactive Sessions**: Launch a session the user can watch and talk to (`interactive: true`). It is not auto-completed on idle — it reports back only when its agent explicitly calls `bgagent_finish`.
+
+- **Session Control**: Rename sessions from the orchestrator (`bgagent_rename` with a `task_id`) or from within the session itself (omit `task_id`).
+
 - **Variable Timeouts**: Configure custom timeouts per task. Some tasks need seconds, others need minutes - you decide.
 
 ## Tools Provided
 
 | Tool | Description |
 |------|-------------|
-| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, agent type, optional `model` override (`provider/model-id`), and optional `prefix` for the session title (`""` omits it). Defaults to the parent conversation's model |
+| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, agent type, optional `model` override (`provider/model-id`), optional `prefix` for the session title (`""` omits it), and `interactive` for user-facing sessions. Defaults to the parent conversation's model |
 | `bgagent_output` | Get task results (blocking or non-blocking) with configurable timeout and message filtering |
 | `bgagent_cancel` | Cancel a running task |
 | `bgagent_list` | List all tasks with optional status filter |
@@ -56,6 +60,8 @@ This is the subagent/subtask plugin we all know and love, with some key features
 | `bgagent_steer` | Send a steering message to a running task; the agent reads it at its next step and changes course |
 | `bgagent_progress` | Lightweight progress of a running task (status, phase, tool calls) without dumping its full history |
 | `bgagent_report` | Child→parent channel: send a compact status report/question to the parent session |
+| `bgagent_rename` | Rename a session: the orchestrator passes `task_id`; an agent renaming its own session omits it |
+| `bgagent_finish` | Interactive sessions signal completion to the parent with this (instead of going idle) |
 
 ## Philosophy
 

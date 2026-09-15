@@ -18,6 +18,7 @@ const createMockTask = (overrides: Partial<BackgroundTask> = {}): BackgroundTask
   batchId: "batch_123",
   resumeCount: 0,
   isForked: false,
+  kind: "autonomous",
   ...overrides,
 });
 

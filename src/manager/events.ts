@@ -115,6 +115,10 @@ export function handleEvent(
     const task = getTasksArray().find((t) => t.sessionID === sessionID);
     if (!task) return;
 
+    // Interactive sessions complete only when the agent calls bgagent_finish —
+    // going idle just means "waiting for the user", so never auto-complete them.
+    if (task.kind === "interactive") return;
+
     // For resumed tasks, do NOT send notifyParentSession - the resume handler
     // (sendResumePromptAsync) will send notifyResumeComplete instead
     if (task.status === "resumed") {
