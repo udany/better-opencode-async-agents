@@ -129,3 +129,25 @@ export const MAX_TASK_LIMIT = 200;
 
 export const DISCOVERY_SERVICE_TYPE = "bgagent-api";
 export const DISCOVERY_TIMEOUT_MS = 3000;
+
+// =============================================================================
+// Tools
+// =============================================================================
+
+/**
+ * The bgagent_* tools this plugin exposes. Used to compute, from a child session's
+ * permission list (which only records DENY entries), which bgagent tools the child
+ * is actually allowed to call.
+ */
+export const BGAGENT_TOOL_NAMES = [
+  "bgagent_task",
+  "bgagent_output",
+  "bgagent_cancel",
+  "bgagent_list",
+  "bgagent_clear",
+  "bgagent_steer",
+  "bgagent_progress",
+  "bgagent_report",
+  "bgagent_rename",
+  "bgagent_finish",
+] as const;

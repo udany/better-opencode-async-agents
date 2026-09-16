@@ -58,7 +58,7 @@ This is the subagent/subtask plugin we all know and love, with some key features
 | `bgagent_list` | List all tasks (agent + provider/model) with optional status filter |
 | `bgagent_clear` | Abort and clear all tasks |
 | `bgagent_steer` | Send a steering message to a running task; the agent reads it at its next step and changes course. Optional `model` switches the task to another provider/model |
-| `bgagent_progress` | Lightweight progress of a running task (status, phase, provider/model, tool calls) without dumping its full history |
+| `bgagent_progress` | Lightweight progress of a running task (status, phase, provider/model, tool calls, allowed/blocked bgagent tools) without dumping its full history |
 | `bgagent_report` | Child→parent channel: send a compact status report/question to the parent session |
 | `bgagent_rename` | Rename a session: the orchestrator passes `task_id`; an agent renaming its own session omits it |
 | `bgagent_finish` | Interactive sessions signal completion to the parent with this (instead of going idle) |

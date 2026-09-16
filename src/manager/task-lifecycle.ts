@@ -1,7 +1,7 @@
 import { type SessionMessage, formatMessagesAsContext, processMessagesForFork } from "../fork";
 import { extractFinalAssistantText, parseModelRef } from "../helpers";
 import { FORK_MESSAGES, INTERACTIVE_INSTRUCTIONS, buildForkPreamble } from "../prompts";
-import type { BackgroundTask, LaunchInput, OpencodeClient } from "../types";
+import type { BackgroundTask, LaunchInput, OpencodeClient, SessionPermission } from "../types";
 
 /**
  * Fork implementation method:
@@ -452,6 +452,25 @@ export function clearAllTasks(
   }
 
   tasks.clear();
+}
+
+/**
+ * Reads a session's tool permission entries. OpenCode only records DENY entries
+ * for the tools disabled via the launch `tools` map, so anything not denied is allowed.
+ * Returns [] on failure (e.g. session gone).
+ */
+export async function getSessionPermissions(
+  sessionID: string,
+  client: OpencodeClient
+): Promise<SessionPermission[] | null> {
+  try {
+    const result = await client.session.get({ path: { id: sessionID } });
+    // `permission` is present at runtime but absent from the generated SDK type.
+    const permission = (result.data as { permission?: SessionPermission[] } | undefined)?.permission;
+    return Array.isArray(permission) ? permission : [];
+  } catch {
+    return null;
+  }
 }
 
 /**

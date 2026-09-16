@@ -94,7 +94,8 @@ Use bgagent_cancel to abort a runaway tool instead.`,
   backgroundProgress: `Get lightweight progress from a background task WITHOUT dumping its full history.
 
 Returns compact metadata only: status, phase, provider/model, tool call counts, last tools used,
-elapsed time, and an optional short tail of the latest assistant text.
+elapsed time, the child's allowed/blocked bgagent tools, and an optional short tail of the
+latest assistant text.
 
 Arguments:
 - task_id: Required task ID

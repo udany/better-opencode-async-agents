@@ -10,6 +10,7 @@ import type {
   ModelRef,
   OpencodeClient,
   PersistedTask,
+  SessionPermission,
   TaskProgress,
 } from "../types";
 import { handleEvent, startEventSubscription } from "./events";
@@ -22,6 +23,7 @@ import {
   checkAndUpdateTaskStatus,
   checkSessionExists,
   clearAllTasks,
+  getSessionPermissions,
   getTaskMessages,
   launchTask,
 } from "./task-lifecycle";
@@ -398,6 +400,15 @@ export class BackgroundManager {
 
   async checkSessionExists(sessionID: string): Promise<boolean> {
     return checkSessionExists(sessionID, this.client);
+  }
+
+  /**
+   * Gets the session's tool permission entries (deny list) for a task.
+   * Lets the orchestrator see which tools a spawned child is actually allowed to use.
+   * Returns null when the session (or its permissions) cannot be read.
+   */
+  async getTaskPermissions(sessionID: string): Promise<SessionPermission[] | null> {
+    return getSessionPermissions(sessionID, this.client);
   }
 
   /**

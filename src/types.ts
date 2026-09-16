@@ -17,6 +17,17 @@ export interface ModelRef {
   modelID: string;
 }
 
+/**
+ * A session-level tool permission entry as returned by the session API.
+ * OpenCode only records DENY entries for tools we explicitly disable via the
+ * launch `tools` map, so a tool is allowed unless there is a matching deny.
+ */
+export interface SessionPermission {
+  permission: string;
+  pattern?: string;
+  action: "allow" | "deny" | "ask";
+}
+
 export interface TaskProgress {
   toolCalls: number;
   toolCallsByName: Record<string, number>;

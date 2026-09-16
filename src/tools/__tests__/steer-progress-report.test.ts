@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { shortId } from "../../helpers";
-import type { BackgroundTask } from "../../types";
+import type { BackgroundTask, SessionPermission } from "../../types";
 import { createBackgroundProgress } from "../progress";
 import { createBackgroundReport } from "../report";
 import { createBackgroundSteer } from "../steer";
@@ -120,7 +120,7 @@ describe("bgagent_progress", () => {
     },
   });
 
-  const makeManager = (task?: BackgroundTask) => ({
+  const makeManager = (task?: BackgroundTask, permissions: SessionPermission[] | null = []) => ({
     resolveTaskIdWithFallback: mock(() => Promise.resolve(task?.sessionID ?? null)),
     getTaskWithFallback: mock(() => Promise.resolve(task)),
     getTaskMessages: mock(() =>
@@ -128,6 +128,7 @@ describe("bgagent_progress", () => {
         { info: { role: "assistant" }, parts: [{ type: "text", text: "latest output here" }] },
       ])
     ),
+    getTaskPermissions: mock(() => Promise.resolve(permissions)),
   });
 
   test("creates a tool with correct description", () => {
@@ -157,6 +158,21 @@ describe("bgagent_progress", () => {
     const result = await tool.execute({ task_id: taskWithProgress.sessionID, tail: 0 }, {} as any);
     expect(result).toContain("Tool calls: 3");
     expect(result).not.toContain("Latest text:");
+  });
+
+  test("shows the child's tool permissions", async () => {
+    const permissions: SessionPermission[] = [
+      { permission: "bgagent_task", action: "deny" },
+      { permission: "bgagent_cancel", action: "deny" },
+    ];
+    const tool = createBackgroundProgress(makeManager(taskWithProgress, permissions));
+    const result = await tool.execute(
+      { task_id: taskWithProgress.sessionID, tail: 0 },
+      {} as any
+    );
+    expect(result).toContain("Bgagent tools:");
+    expect(result).toContain("bgagent_report"); // not denied => enabled
+    expect(result).toContain("Blocked tools: bgagent_cancel, bgagent_task");
   });
 });
 
