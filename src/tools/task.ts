@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
-import { uniqueShortId } from "../helpers";
+import { formatModel, parseModelRef, uniqueShortId } from "../helpers";
 import {
   ERROR_MESSAGES,
   FORK_MESSAGES,
@@ -7,7 +7,7 @@ import {
   TOOL_DESCRIPTIONS,
   WARNING_MESSAGES,
 } from "../prompts";
-import type { BackgroundTask, LaunchInput } from "../types";
+import type { BackgroundTask, LaunchInput, ModelRef } from "../types";
 import { type ResumeManager, executeResume, validateResumeTask } from "./resume";
 
 // =============================================================================
@@ -98,7 +98,13 @@ export function createBackgroundTask(manager: TaskManager): ToolDefinition {
 
 async function handleResumeMode(
   manager: TaskManager,
-  args: { resume?: string; description: string; prompt: string; agent: string },
+  args: {
+    resume?: string;
+    model?: string;
+    description: string;
+    prompt: string;
+    agent: string;
+  },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toolContext: any
 ): Promise<string> {
@@ -109,6 +115,16 @@ async function handleResumeMode(
   const trimmedPrompt = args.prompt?.trim();
   if (!trimmedPrompt) {
     return ERROR_MESSAGES.promptRequired;
+  }
+
+  // Optional model switch for the (re)started turn.
+  let model: ModelRef | undefined;
+  if (args.model) {
+    try {
+      model = parseModelRef(args.model);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 
   // Warn if extra params are provided (but proceed with resume)
@@ -124,7 +140,7 @@ async function handleResumeMode(
   }
 
   // Execute the resume
-  const result = await executeResume(manager, validation.task, trimmedPrompt, toolContext);
+  const result = await executeResume(manager, validation.task, trimmedPrompt, toolContext, model);
 
   if (!result.success) {
     return result.error;
@@ -186,7 +202,10 @@ async function handleLaunchMode(
     // Get sibling IDs to generate collision-free short ID
     const siblingIds = manager.getTaskSessionIds?.() ?? [];
     const displayId = uniqueShortId(task.sessionID, siblingIds);
-    return SUCCESS_MESSAGES.taskLaunched(displayId);
+    return SUCCESS_MESSAGES.taskLaunched(
+      displayId,
+      task.model ? formatModel(task.model) : undefined
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return ERROR_MESSAGES.launchFailed(message);

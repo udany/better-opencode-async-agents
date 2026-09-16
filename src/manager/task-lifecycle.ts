@@ -1,5 +1,5 @@
 import { type SessionMessage, formatMessagesAsContext, processMessagesForFork } from "../fork";
-import { extractFinalAssistantText } from "../helpers";
+import { extractFinalAssistantText, parseModelRef } from "../helpers";
 import { FORK_MESSAGES, INTERACTIVE_INSTRUCTIONS, buildForkPreamble } from "../prompts";
 import type { BackgroundTask, LaunchInput, OpencodeClient } from "../types";
 
@@ -23,11 +23,7 @@ export async function resolveLaunchModel(
   input: { model?: string; parentSessionID: string }
 ): Promise<{ providerID: string; modelID: string } | undefined> {
   if (input.model) {
-    const slash = input.model.indexOf("/");
-    if (slash <= 0 || slash === input.model.length - 1) {
-      throw new Error(`Invalid model override: "${input.model}". Expected "provider/model-id".`);
-    }
-    return { providerID: input.model.slice(0, slash), modelID: input.model.slice(slash + 1) };
+    return parseModelRef(input.model);
   }
   try {
     const parent = await client.session.get({ path: { id: input.parentSessionID } });
@@ -166,6 +162,10 @@ export async function launchTask(
   }
   const batchId = getOrCreateBatchId();
 
+  // Resolve the model up-front so it is stored on the task and visible to the
+  // orchestrator. Invalid overrides throw here (before a session is created).
+  const launchModel = await resolveLaunchModel(client, input);
+
   const task: BackgroundTask = {
     sessionID,
     parentSessionID: input.parentSessionID,
@@ -180,6 +180,7 @@ export async function launchTask(
     resumeCount: 0,
     isForked: input.fork ?? false,
     kind: input.interactive ? "interactive" : "autonomous",
+    model: launchModel,
     progress: {
       toolCalls: 0,
       toolCallsByName: {},
@@ -239,8 +240,6 @@ export async function launchTask(
     bgagentToolOverrides.bgagent_rename = true;
     parts.push({ type: "text", text: INTERACTIVE_INSTRUCTIONS, synthetic: true });
   }
-
-  const launchModel = await resolveLaunchModel(client, input);
 
   client.session
     .promptAsync({

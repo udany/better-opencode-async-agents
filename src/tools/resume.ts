@@ -1,6 +1,6 @@
 import { setTaskStatus, shortId } from "../helpers";
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../prompts";
-import type { BackgroundTask } from "../types";
+import type { BackgroundTask, ModelRef } from "../types";
 
 // =============================================================================
 // Resume Helper Types
@@ -13,8 +13,13 @@ export interface ResumeManager {
   getTaskWithFallback(id: string): Promise<BackgroundTask | undefined>;
   persistTask(task: BackgroundTask): Promise<void>;
   checkSessionExists(sessionID: string): Promise<boolean>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sendResumePromptAsync(task: BackgroundTask, message: string, toolContext: any): Promise<void>;
+  sendResumePromptAsync(
+    task: BackgroundTask,
+    message: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toolContext: any,
+    model?: ModelRef
+  ): Promise<void>;
 }
 
 export type ResumeValidationResult =
@@ -79,7 +84,8 @@ export async function executeResume(
   task: BackgroundTask,
   prompt: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolContext: any
+  toolContext: any,
+  model?: ModelRef
 ): Promise<{ success: true; message: string } | { success: false; error: string }> {
   const wasRunning = task.status === "running";
 
@@ -95,8 +101,12 @@ export async function executeResume(
   }
   task.resumeCount++;
 
+  // Switching the model rides on the follow-up prompt (OpenCode has no
+  // session-level model update): record it so the orchestrator sees the change.
+  if (model) task.model = model;
+
   try {
-    await manager.sendResumePromptAsync(task, prompt, toolContext);
+    await manager.sendResumePromptAsync(task, prompt, toolContext, model);
     await manager.persistTask(task);
     return {
       success: true,

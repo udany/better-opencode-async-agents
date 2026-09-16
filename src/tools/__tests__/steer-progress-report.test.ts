@@ -56,7 +56,34 @@ describe("bgagent_steer", () => {
       {} as any
     );
     expect(result).toContain("Steering message sent");
-    expect(manager.steerTask).toHaveBeenCalledWith(task, "give status report");
+    expect(manager.steerTask).toHaveBeenCalledWith(task, "give status report", undefined);
+  });
+
+  test("switches the model when model is provided", async () => {
+    const task = createMockTask({ status: "running", model: { providerID: "a", modelID: "b" } });
+    const manager = makeManager(task);
+    const tool = createBackgroundSteer(manager);
+    const result = await tool.execute(
+      { task_id: task.sessionID, message: "continue", model: "opencode-go/deepseek-v4.1-flash" },
+      {} as any
+    );
+    expect(result).toContain("Steering message sent");
+    expect(manager.steerTask).toHaveBeenCalledWith(task, "continue", {
+      providerID: "opencode-go",
+      modelID: "deepseek-v4.1-flash",
+    });
+  });
+
+  test("rejects an invalid model override", async () => {
+    const task = createMockTask({ status: "running" });
+    const manager = makeManager(task);
+    const tool = createBackgroundSteer(manager);
+    const result = await tool.execute(
+      { task_id: task.sessionID, message: "continue", model: "no-slash" },
+      {} as any
+    );
+    expect(result).toContain("Invalid model override");
+    expect(manager.steerTask).not.toHaveBeenCalled();
   });
 
   test("attaches child sessionId to tool part metadata for UI navigation", async () => {

@@ -22,7 +22,7 @@ Use this for:
 Arguments:
 - resume: (Optional) Task ID to resume - if provided, enters resume mode. You can send follow-up prompts for continuous feedback.
 - fork: (Optional) If true, fork parent context to child session (child inherits conversation history of caller agent). MUST provide the expected response to it.
-- model: (Optional) Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation.
+- model: (Optional) Model override for the task session in "provider/model-id" form. Defaults to the current model of the parent conversation. In resume mode, pass it to switch the running task to a different provider/model.
 - prefix: (Optional) Session title prefix. When omitted the default ("Background: ") is used. Pass "" for no prefix, or any custom prefix you want.
 - interactive: (Optional) If true, the session is interactive: the user can see and message it directly. It is NOT auto-completed on idle; it completes only when the agent calls bgagent_finish.
 - description: Short task description (shown in status)
@@ -36,7 +36,7 @@ Optionally use \`bgagent_output\` later if you need to check results manually wi
 
   backgroundList: `List all background tasks.
 
-Shows all running, completed, error, and cancelled background tasks with their status.
+Shows all running, completed, error, and cancelled background tasks with their status, agent, and provider/model.
 
 Arguments:
 - status: Optional filter by status ("running", "completed", "error", "cancelled").`,
@@ -87,12 +87,13 @@ the child replies via bgagent_report with a short summary.
 Arguments:
 - task_id: Required task ID to steer
 - message: The steering instruction / status-report request
+- model: (Optional) Switch the task to this provider/model (e.g. "opencode-go/deepseek-v4.1-flash") for this turn and subsequent ones. Omit to keep the current model.
 
 Note: if the agent is mid long-running tool, the message is read when that tool yields.
 Use bgagent_cancel to abort a runaway tool instead.`,
   backgroundProgress: `Get lightweight progress from a background task WITHOUT dumping its full history.
 
-Returns compact metadata only: status, phase, tool call counts, last tools used,
+Returns compact metadata only: status, phase, provider/model, tool call counts, last tools used,
 elapsed time, and an optional short tail of the latest assistant text.
 
 Arguments:
@@ -137,8 +138,8 @@ Arguments:
 // =============================================================================
 
 export const SUCCESS_MESSAGES = {
-  taskLaunched: (shortTaskId: string) => `⏳ **Background task launched**
-Task ID: \`${shortTaskId}\`
+  taskLaunched: (shortTaskId: string, model?: string) => `⏳ **Background task launched**
+Task ID: \`${shortTaskId}\`${model ? `\nModel: ${model}` : ""}
 
 You can continue working or say 'waiting' and halt.`,
 
@@ -366,6 +367,7 @@ export const FORMAT_TEMPLATES = {
     shortTaskId: string,
     description: string,
     agent: string,
+    model: string,
     status: string,
     duration: string,
     progressSection: string,
@@ -378,6 +380,7 @@ export const FORMAT_TEMPLATES = {
 | Task ID | \`${shortTaskId}\` |
 | Description | ${description} |
 | Agent | ${agent} |
+| Model | ${model} |
 | Status | ${icon} **${status}** |
 | Duration | ${duration} |${progressSection}
 ${statusNote}
@@ -387,24 +390,38 @@ ${statusNote}
 ${promptPreview}
 \`\`\``,
 
-  taskResult: (shortTaskId: string, description: string, duration: string, content: string) =>
+  taskResult: (
+    shortTaskId: string,
+    description: string,
+    model: string,
+    duration: string,
+    content: string
+  ) =>
     `✓ **Task Completed**
 
 | Field | Value |
 |-------|-------|
 | Task ID | \`${shortTaskId}\` |
 | Description | ${description} |
+| Model | ${model} |
 | Duration | ${duration} |
 
 ---
 
 ${content}`,
 
-  taskResultError: (shortTaskId: string, description: string, duration: string, errMsg: string) =>
+  taskResultError: (
+    shortTaskId: string,
+    description: string,
+    model: string,
+    duration: string,
+    errMsg: string
+  ) =>
     `Task Result
 
 Task ID: ${shortTaskId}
 Description: ${description}
+Model: ${model}
 Duration: ${duration}
 
 ---
@@ -413,8 +430,8 @@ Error fetching messages: ${errMsg}`,
 
   listHeader: `# Background Tasks
 
-| Task ID | Description | Agent | Status | Duration | Tools |
-|---------|-------------|-------|--------|----------|-------|`,
+| Task ID | Description | Agent | Model | Status | Duration | Tools |
+|---------|-------------|-------|-------|--------|----------|-------|`,
 
   listSummary: (
     total: number,

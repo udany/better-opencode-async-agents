@@ -201,6 +201,23 @@ describe("tool factories", () => {
       expect(result).toContain("1"); // shortId of ses_1
       expect(result).not.toContain("2"); // shortId of ses_2 is 2
     });
+
+    test("shows provider/model for each task", async () => {
+      const tasks = [
+        createMockTask({
+          sessionID: "ses_1",
+          status: "running",
+          model: { providerID: "opencode-go", modelID: "deepseek-v4.1-flash" },
+        }),
+      ];
+      const mockManager = { getAllTasks: mock(() => tasks) };
+      const tool = createBackgroundList(mockManager);
+
+      const result = await tool.execute({}, {} as any);
+
+      expect(result).toContain("opencode-go/deepseek-v4.1-flash");
+      expect(result).toContain("Model");
+    });
   });
 
   describe("createBackgroundClear", () => {

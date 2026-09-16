@@ -52,13 +52,13 @@ This is the subagent/subtask plugin we all know and love, with some key features
 
 | Tool | Description |
 |------|-------------|
-| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, agent type, optional `model` override (`provider/model-id`), optional `prefix` for the session title (`""` omits it), and `interactive` for user-facing sessions. Defaults to the parent conversation's model |
+| `bgagent_task` | Launch async background agent tasks (or resume/follow-up) with description, prompt, agent type, optional `model` override (`provider/model-id`), optional `prefix` for the session title (`""` omits it), and `interactive` for user-facing sessions. Defaults to the parent conversation's model. In resume mode, `model` switches the task to a different provider/model |
 | `bgagent_output` | Get task results (blocking or non-blocking) with configurable timeout and message filtering |
 | `bgagent_cancel` | Cancel a running task |
-| `bgagent_list` | List all tasks with optional status filter |
+| `bgagent_list` | List all tasks (agent + provider/model) with optional status filter |
 | `bgagent_clear` | Abort and clear all tasks |
-| `bgagent_steer` | Send a steering message to a running task; the agent reads it at its next step and changes course |
-| `bgagent_progress` | Lightweight progress of a running task (status, phase, tool calls) without dumping its full history |
+| `bgagent_steer` | Send a steering message to a running task; the agent reads it at its next step and changes course. Optional `model` switches the task to another provider/model |
+| `bgagent_progress` | Lightweight progress of a running task (status, phase, provider/model, tool calls) without dumping its full history |
 | `bgagent_report` | Child→parent channel: send a compact status report/question to the parent session |
 | `bgagent_rename` | Rename a session: the orchestrator passes `task_id`; an agent renaming its own session omits it |
 | `bgagent_finish` | Interactive sessions signal completion to the parent with this (instead of going idle) |

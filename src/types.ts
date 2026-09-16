@@ -11,6 +11,12 @@ export type TaskPhase = "waiting" | "streaming" | "tool";
 /** Task modes. */
 export type TaskKind = "autonomous" | "interactive";
 
+/** Provider/model reference for a task session, e.g. { providerID: "opencode-go", modelID: "deepseek-v4.1-flash" }. */
+export interface ModelRef {
+  providerID: string;
+  modelID: string;
+}
+
 export interface TaskProgress {
   toolCalls: number;
   toolCallsByName: Record<string, number>;
@@ -49,6 +55,8 @@ export interface PersistedTask {
   batchId?: string;
   /** Task kind. "interactive" sessions complete only via bgagent_finish, not on idle. */
   kind?: TaskKind;
+  /** Provider/model the task runs on. */
+  model?: ModelRef;
 }
 
 /**
@@ -75,6 +83,8 @@ export interface BackgroundTask {
   isForked: boolean;
   /** Task kind. "interactive" sessions complete only when the agent calls bgagent_finish. */
   kind: TaskKind;
+  /** Provider/model the task runs on. Set at launch; updated when the model is switched. */
+  model?: ModelRef;
 }
 
 export interface MessageFilter {

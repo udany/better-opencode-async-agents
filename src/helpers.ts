@@ -1,5 +1,5 @@
 import { FORMAT_TEMPLATES, PLACEHOLDER_TEXT, STATUS_NOTES } from "./prompts";
-import type { BackgroundTask, BackgroundTaskStatus } from "./types";
+import type { BackgroundTask, BackgroundTaskStatus, ModelRef } from "./types";
 
 // =============================================================================
 // Helper Functions
@@ -122,6 +122,26 @@ export function truncateText(text: string, maxLength: number): string {
   return `${text.slice(0, maxLength)}...`;
 }
 
+/**
+ * Formats a task's provider/model for display, e.g. "opencode-go/deepseek-v4.1-flash".
+ * Returns "-" when the model is unknown.
+ */
+export function formatModel(model?: ModelRef): string {
+  if (!model?.providerID || !model?.modelID) return "-";
+  return `${model.providerID}/${model.modelID}`;
+}
+
+/**
+ * Parses a "provider/model-id" string into a ModelRef. Throws on malformed input.
+ */
+export function parseModelRef(model: string): ModelRef {
+  const slash = model.indexOf("/");
+  if (slash <= 0 || slash === model.length - 1) {
+    throw new Error(`Invalid model override "${model}". Expected "provider/model-id".`);
+  }
+  return { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) };
+}
+
 export function getStatusIcon(status: BackgroundTaskStatus): string {
   switch (status) {
     case "running":
@@ -161,6 +181,7 @@ export function formatTaskStatus(task: BackgroundTask): string {
     shortId(task.sessionID),
     task.description,
     task.agent,
+    formatModel(task.model),
     task.status,
     duration,
     progressSection,
@@ -201,11 +222,18 @@ export async function formatTaskResult(
   getMessages: (sessionID: string) => Promise<TaskMessage[]>
 ): Promise<string> {
   const duration = formatDuration(task.startedAt, task.completedAt);
+  const model = formatModel(task.model);
 
   // Prefer the result captured explicitly when the task completed. This survives
   // session deletion and does not depend on the last message having a text part.
   if (task.result) {
-    return FORMAT_TEMPLATES.taskResult(shortId(task.sessionID), task.description, duration, task.result);
+    return FORMAT_TEMPLATES.taskResult(
+      shortId(task.sessionID),
+      task.description,
+      model,
+      duration,
+      task.result
+    );
   }
 
   try {
@@ -215,6 +243,7 @@ export async function formatTaskResult(
       return FORMAT_TEMPLATES.taskResult(
         shortId(task.sessionID),
         task.description,
+        model,
         duration,
         PLACEHOLDER_TEXT.noMessagesFound
       );
@@ -226,6 +255,7 @@ export async function formatTaskResult(
       return FORMAT_TEMPLATES.taskResult(
         shortId(task.sessionID),
         task.description,
+        model,
         duration,
         PLACEHOLDER_TEXT.noAssistantResponse
       );
@@ -236,6 +266,7 @@ export async function formatTaskResult(
     return FORMAT_TEMPLATES.taskResult(
       shortId(task.sessionID),
       task.description,
+      model,
       duration,
       textContent || PLACEHOLDER_TEXT.noTextOutput
     );
@@ -244,6 +275,7 @@ export async function formatTaskResult(
     return FORMAT_TEMPLATES.taskResultError(
       shortId(task.sessionID),
       task.description,
+      model,
       duration,
       errMsg
     );

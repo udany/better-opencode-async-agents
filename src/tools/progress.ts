@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
-import { formatDuration, truncateText } from "../helpers";
+import { formatDuration, formatModel, truncateText } from "../helpers";
 import { ERROR_MESSAGES, TOOL_DESCRIPTIONS } from "../prompts";
 import type { BackgroundTask } from "../types";
 
@@ -42,6 +42,7 @@ async function formatProgress(
   lines.push(`Task ID: \`${task.sessionID.slice(0, 8)}\``);
   lines.push(`Description: ${task.description}`);
   lines.push(`Agent: ${task.agent}`);
+  lines.push(`Model: ${formatModel(task.model)}`);
   lines.push(`Status: ${task.status}`);
   lines.push(`Phase: ${progress?.phase ?? "waiting"}`);
   lines.push(`Elapsed: ${elapsed}`);

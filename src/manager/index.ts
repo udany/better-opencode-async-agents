@@ -7,6 +7,7 @@ import type {
   FilteredMessage,
   LaunchInput,
   MessageFilter,
+  ModelRef,
   OpencodeClient,
   PersistedTask,
   TaskProgress,
@@ -151,6 +152,7 @@ export class BackgroundManager {
       progress: task.progress,
       startedAt: task.startedAt,
       batchId: task.batchId,
+      model: task.model,
     };
     try {
       await saveTask(task.sessionID, persisted);
@@ -334,6 +336,7 @@ export class BackgroundManager {
           isForked: persisted.isForked ?? false,
           kind: persisted.kind ?? "autonomous",
           result: persisted.result,
+          model: persisted.model,
         };
         // Add to memory cache
         this.tasks.set(id, task);
@@ -456,7 +459,8 @@ export class BackgroundManager {
   async sendResumePromptAsync(
     task: BackgroundTask,
     message: string,
-    _toolContext?: { sessionID: string; messageID: string; agent: string }
+    _toolContext?: { sessionID: string; messageID: string; agent: string },
+    model?: ModelRef
   ): Promise<void> {
     // Reset notification state so the resumed task can send a fresh completion
     // notification when its resumed turn finishes.
@@ -465,11 +469,13 @@ export class BackgroundManager {
     // Non-blocking: inject the follow-up. Completion is detected by the normal
     // session.idle/poll path — resume never waits synchronously and never
     // invents a timeout (which previously produced spurious "failed" notices).
+    // When `model` is given, this turn (and subsequent ones) runs on it.
     this.client.session
       .promptAsync({
         path: { id: task.sessionID },
         body: {
           agent: task.agent,
+          ...(model ? { model } : {}),
           parts: [{ type: "text", text: message }],
         },
       })
@@ -487,12 +493,14 @@ export class BackgroundManager {
    * The task's agent reads it at its next step and changes course.
    * Does NOT touch completion state — the task keeps working and completes on its own.
    */
-  async steerTask(task: BackgroundTask, message: string): Promise<void> {
+  async steerTask(task: BackgroundTask, message: string, model?: ModelRef): Promise<void> {
     resetNotificationState(task.sessionID);
+    if (model) task.model = model;
     await this.client.session.promptAsync({
       path: { id: task.sessionID },
       body: {
         agent: task.agent,
+        ...(model ? { model } : {}),
         parts: [{ type: "text", text: message }],
       },
     });

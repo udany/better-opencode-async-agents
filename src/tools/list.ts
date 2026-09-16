@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from "@opencode-ai/plugin";
-import { formatDuration, getStatusIcon, uniqueShortId } from "../helpers";
+import { formatDuration, formatModel, getStatusIcon, uniqueShortId } from "../helpers";
 import {
   ERROR_MESSAGES,
   FORMAT_TEMPLATES,
@@ -78,7 +78,7 @@ export function createBackgroundList(manager: {
                 : task.progress?.toolCalls
                   ? `🔧${task.progress.toolCalls}`
                   : "-";
-            return `| \`${idWithIndicators}\` | ${desc} | ${task.agent} | ${icon} ${task.status} | ${duration} | ${toolsInfo} |`;
+            return `| \`${idWithIndicators}\` | ${desc} | ${task.agent} | ${formatModel(task.model)} | ${icon} ${task.status} | ${duration} | ${toolsInfo} |`;
           })
           .join("\n");
 
