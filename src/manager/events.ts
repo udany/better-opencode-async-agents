@@ -1,5 +1,6 @@
 import { setTaskStatus } from "../helpers";
 import type { BackgroundTask } from "../types";
+import { captureTaskResult } from "./task-lifecycle";
 
 // =============================================================================
 // Event Handling Functions
@@ -17,14 +18,17 @@ export async function startEventSubscription(
       }>;
     };
   },
-  handleEvent: (event: { type: string; properties?: Record<string, unknown> }) => void
+  handleEvent: (event: {
+    type: string;
+    properties?: Record<string, unknown>;
+  }) => void | Promise<void>
 ): Promise<void> {
   try {
     const subscription = await client.event.subscribe();
     // Process events in background
     (async () => {
       for await (const event of subscription.stream) {
-        handleEvent(event);
+        await handleEvent(event);
       }
     })().catch(() => {
       // Stream ended, try to reconnect
@@ -40,7 +44,7 @@ export async function startEventSubscription(
  * Handles incoming events and triggers appropriate actions.
  * Primary completion detection mechanism via session.idle events.
  */
-export function handleEvent(
+export async function handleEvent(
   event: {
     type: string;
     properties?: Record<string, unknown>;
@@ -54,9 +58,12 @@ export function handleEvent(
       eventType: "task.completed" | "task.error" | "task.cancelled",
       task: BackgroundTask
     ) => void;
+    getTaskMessages?: (
+      sessionID: string
+    ) => Promise<Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }>>;
   }
-): void {
-  const { clearAllTasks, getTasksArray, notifyParentSession, persistTask, emitTaskEvent } =
+): Promise<void> {
+  const { clearAllTasks, getTasksArray, notifyParentSession, persistTask, emitTaskEvent, getTaskMessages } =
     callbacks;
   const props = event.properties;
 
@@ -125,6 +132,10 @@ export function handleEvent(
     // completion signal.
     if (task.status !== "running" && task.status !== "resumed") return;
 
+    // Capture the result BEFORE persisting, so the stored result is complete.
+    if (getTaskMessages) {
+      await captureTaskResult(task, getTaskMessages);
+    }
     setTaskStatus(task, "completed", { persistFn: persistTask, emitFn: emitTaskEvent });
     // Trigger notification immediately on event-based completion
     notifyParentSession(task);

@@ -277,4 +277,43 @@ describe("createBackgroundOutput", () => {
     expect(result).toContain("msg_running_1");
     expect(result).toContain("streamed partial output");
   });
+
+  test("skips tool-only trailing assistant messages and returns the last text", async () => {
+    const completedTask = createMockTask({
+      status: "completed",
+      completedAt: new Date("2026-01-01T00:00:10.000Z").toISOString(),
+    });
+    const manager = createMockOutputManager(completedTask, {
+      getTaskMessages: mock(() =>
+        Promise.resolve([
+          { info: { role: "assistant" }, parts: [{ type: "text", text: "the real result" }] },
+          { info: { role: "assistant" }, parts: [{ type: "tool" }, { type: "step-finish" }] },
+          { info: { role: "assistant" }, parts: [{ type: "tool" }] },
+        ])
+      ),
+    });
+
+    const tool = createBackgroundOutput(manager);
+    const result = await tool.execute({ task_id: completedTask.sessionID }, {} as any);
+
+    expect(result).toContain("the real result");
+    expect(result).not.toContain("No text output");
+  });
+
+  test("prefers an explicitly captured task.result over fetching messages", async () => {
+    const completedTask = createMockTask({
+      status: "completed",
+      completedAt: new Date("2026-01-01T00:00:10.000Z").toISOString(),
+      result: "captured at completion",
+    });
+    const manager = createMockOutputManager(completedTask, {
+      getTaskMessages: mock(() => Promise.resolve([] as any[])),
+    });
+
+    const tool = createBackgroundOutput(manager);
+    const result = await tool.execute({ task_id: completedTask.sessionID }, {} as any);
+
+    expect(result).toContain("captured at completion");
+    expect(manager.getTaskMessages).not.toHaveBeenCalled();
+  });
 });

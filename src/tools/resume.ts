@@ -90,6 +90,8 @@ export async function executeResume(
       return { success: false, error: ERROR_MESSAGES.sessionExpired };
     }
     setTaskStatus(task, "resumed");
+    // Drop the previous turn's captured result so output reflects the new turn.
+    task.result = undefined;
   }
   task.resumeCount++;
 

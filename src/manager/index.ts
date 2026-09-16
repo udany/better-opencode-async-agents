@@ -17,6 +17,7 @@ import { notifyParentSession, resetNotificationState, showProgressToast } from "
 import { pollRunningTasks, startPolling, stopPolling, updateTaskProgress } from "./polling";
 import {
   cancelTask,
+  captureTaskResult,
   checkAndUpdateTaskStatus,
   checkSessionExists,
   clearAllTasks,
@@ -332,6 +333,7 @@ export class BackgroundManager {
           resumeCount: persisted.resumeCount ?? 0,
           isForked: persisted.isForked ?? false,
           kind: persisted.kind ?? "autonomous",
+          result: persisted.result,
         };
         // Add to memory cache
         this.tasks.set(id, task);
@@ -551,6 +553,7 @@ export class BackgroundManager {
       }
     }
     resetNotificationState(task.sessionID);
+    await captureTaskResult(task, (sessionID) => this.getTaskMessages(sessionID));
     setTaskStatus(task, "completed", {
       persistFn: (t) => void this.persistTask(t),
       emitFn: (eventType, t) => this.emitTaskEvent(eventType, t),
@@ -639,6 +642,7 @@ export class BackgroundManager {
         notifyParentSession: (task) => this.notifyParentSession(task),
         persistTask: (task) => void this.persistTask(task),
         emitTaskEvent: (eventType, task) => this.emitTaskEvent(eventType, task),
+        getTaskMessages: (sessionID) => this.getTaskMessages(sessionID),
       })
     );
   }

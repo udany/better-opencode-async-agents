@@ -175,10 +175,39 @@ interface TaskMessage {
   parts?: Array<{ type?: string; text?: string }>;
 }
 
+/**
+ * Extracts the most recent assistant text from a session's messages.
+ *
+ * The agent's final step is frequently tool-only (no text part) — e.g. it ends on
+ * a tool call and the turn goes idle. Blindly taking the LAST assistant message
+ * therefore yields no text even though the agent produced a real result earlier.
+ * Scan backwards for the newest assistant message that actually contains text.
+ */
+export function extractFinalAssistantText(messages: TaskMessage[]): string {
+  const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
+  for (let i = assistantMessages.length - 1; i >= 0; i--) {
+    const text = (assistantMessages[i]?.parts ?? [])
+      .filter((p) => p.type === "text")
+      .map((p) => p.text ?? "")
+      .filter((part) => part.length > 0)
+      .join("\n");
+    if (text) return text;
+  }
+  return "";
+}
+
 export async function formatTaskResult(
   task: BackgroundTask,
   getMessages: (sessionID: string) => Promise<TaskMessage[]>
 ): Promise<string> {
+  const duration = formatDuration(task.startedAt, task.completedAt);
+
+  // Prefer the result captured explicitly when the task completed. This survives
+  // session deletion and does not depend on the last message having a text part.
+  if (task.result) {
+    return FORMAT_TEMPLATES.taskResult(shortId(task.sessionID), task.description, duration, task.result);
+  }
+
   try {
     const messages = await getMessages(task.sessionID);
 
@@ -186,7 +215,7 @@ export async function formatTaskResult(
       return FORMAT_TEMPLATES.taskResult(
         shortId(task.sessionID),
         task.description,
-        formatDuration(task.startedAt, task.completedAt),
+        duration,
         PLACEHOLDER_TEXT.noMessagesFound
       );
     }
@@ -197,22 +226,17 @@ export async function formatTaskResult(
       return FORMAT_TEMPLATES.taskResult(
         shortId(task.sessionID),
         task.description,
-        formatDuration(task.startedAt, task.completedAt),
+        duration,
         PLACEHOLDER_TEXT.noAssistantResponse
       );
     }
 
-    const lastMessage = assistantMessages[assistantMessages.length - 1];
-    const textParts = lastMessage?.parts?.filter((p) => p.type === "text") ?? [];
-    const textContent = textParts
-      .map((p) => p.text ?? "")
-      .filter((text) => text.length > 0)
-      .join("\n");
+    const textContent = extractFinalAssistantText(messages);
 
     return FORMAT_TEMPLATES.taskResult(
       shortId(task.sessionID),
       task.description,
-      formatDuration(task.startedAt, task.completedAt),
+      duration,
       textContent || PLACEHOLDER_TEXT.noTextOutput
     );
   } catch (error) {
@@ -220,7 +244,7 @@ export async function formatTaskResult(
     return FORMAT_TEMPLATES.taskResultError(
       shortId(task.sessionID),
       task.description,
-      formatDuration(task.startedAt, task.completedAt),
+      duration,
       errMsg
     );
   }

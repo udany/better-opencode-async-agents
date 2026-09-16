@@ -7,6 +7,7 @@ import {
 } from "../constants";
 import { setTaskStatus } from "../helpers";
 import type { BackgroundTask, OpencodeClient, TaskPhase } from "../types";
+import { captureTaskResult } from "./task-lifecycle";
 
 /**
  * FALLBACK & PROGRESS MECHANISM: Polling for task status updates.
@@ -144,6 +145,7 @@ export async function pollRunningTasks(
             );
 
             if (hasAssistantResponse) {
+              await captureTaskResult(task, getTaskMessages);
               setTaskStatus(task, "completed", { persistFn: persistTask, emitFn: emitTaskEvent });
               notifyParentSession(task);
               continue;
@@ -157,6 +159,9 @@ export async function pollRunningTasks(
       }
 
       if (sessionStatus.type === "idle") {
+        if (getTaskMessages) {
+          await captureTaskResult(task, getTaskMessages);
+        }
         setTaskStatus(task, "completed", { persistFn: persistTask, emitFn: emitTaskEvent });
         notifyParentSession(task);
         continue;

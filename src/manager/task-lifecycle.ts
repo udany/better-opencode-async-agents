@@ -1,4 +1,5 @@
 import { type SessionMessage, formatMessagesAsContext, processMessagesForFork } from "../fork";
+import { extractFinalAssistantText } from "../helpers";
 import { FORK_MESSAGES, INTERACTIVE_INSTRUCTIONS, buildForkPreamble } from "../prompts";
 import type { BackgroundTask, LaunchInput, OpencodeClient } from "../types";
 
@@ -326,6 +327,27 @@ export async function getTaskMessages(
 }
 
 /**
+ * Captures a task's final result text and stores it on the task, so `bgagent_output`
+ * does not have to reconstruct it from messages later (which breaks when the session's
+ * last assistant message is tool-only, or when the session is later deleted).
+ * Best-effort: on failure the task keeps no result and output falls back to lazy extraction.
+ */
+export async function captureTaskResult(
+  task: BackgroundTask,
+  getMessages: (
+    sessionID: string
+  ) => Promise<Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }>>
+): Promise<void> {
+  try {
+    const messages = await getMessages(task.sessionID);
+    const text = extractFinalAssistantText(messages);
+    if (text) task.result = text;
+  } catch {
+    // Leave task.result unset; formatTaskResult will fall back to lazy extraction.
+  }
+}
+
+/**
  * Check and update task status.
  *
  * If the task's session is idle, marks the task as completed and notifies the parent session.
@@ -364,6 +386,9 @@ export async function checkAndUpdateTaskStatus(
   }
 
   const completeTask = async (): Promise<BackgroundTask> => {
+    if (getTaskMessages) {
+      await captureTaskResult(task, getTaskMessages);
+    }
     task.status = "completed";
     task.completedAt = new Date().toISOString();
     emitTaskEvent?.("task.completed", task);
