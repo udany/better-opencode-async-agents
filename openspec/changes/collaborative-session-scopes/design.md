@@ -1,88 +1,97 @@
 ## Context
 
-`BackgroundTask` currently stores one `parentSessionID`, while `BackgroundManager.tasks` is the in-memory registry. `bgagent_list` derives visibility from direct parentage and `bgagent_report` routes only from child to parent. Persistence stores task metadata but no authorization or relationship data. The requested behavior needs one model for child collaboration and peer orchestrators, with explicit access control and no accidental widening of the existing private default.
+The current `BackgroundTask` record represents an asynchronously managed agent session, not a user-domain task. It carries the managed session's lifecycle, result, agent configuration, and `parentSessionID`. That parent field identifies the session that initiated the agent and is provenance; it does not establish ownership of the agent or its messages.
 
-The design must remain compatible with existing task ownership, completion, resume, list, and report flows. It must also account for multiple plugin instances or manager actors observing the same persisted collaboration state, without assuming that an in-memory map is the authority for authorization.
+The collaboration boundary is therefore a coordination group. A group contains asynchronous-agent and orchestrator memberships. Members of one group can see and communicate according to that group's policy; members of different groups are isolated. An orchestrator may create multiple groups, allowing separate subsets of agents to coordinate without sharing visibility.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Model collaboration as an explicit scope/domain with participants, task visibility, communication permissions, and an owner or administrator distinct from task ownership.
-- Use the same membership and authorization model for child agents and peer orchestrators.
-- Make discovery, joining, revocation, messaging, task lifecycle, persistence, and restart recovery testable.
-- Preserve sender session, sender agent, and task identity on every routed message.
-- Keep existing parent-child tools working through an explicit compatibility mapping rather than a second authorization system.
-- Define concurrency behavior for membership changes, task updates, and messages observed by more than one manager.
+- Establish `AsyncAgent` as the domain name for the managed asynchronous-agent record while retaining current storage identifiers until migration is implemented.
+- Define a group as the sole coordination boundary for visibility and communication.
+- Represent membership with an explicit `agent` or `orchestrator` role without creating a separate participant domain entity.
+- Make orchestrator governance explicit: only orchestrators create groups, add members, and end sessions.
+- Preserve literal message bodies and available sender session, agent, and provenance identity.
+- Make semantic group names useful for display while making technical IDs mandatory for unambiguous references.
+- Migrate legacy records deterministically and preserve private parent-child compatibility through migrated groups.
 
 **Non-Goals:**
 
-- Selecting a database, transport, locking technology, or cross-process protocol before the lead confirms the operational boundary.
-- Making all tasks globally discoverable or introducing public collaboration rooms.
-- Replacing task ownership, parent-session traceability, completion state, resume semantics, or existing tool names.
-- Allowing collaboration membership to grant unrestricted control over tasks; visibility, messaging, and task-control rights remain separate.
+- Treating an asynchronous agent as a task with task ownership; `parentSessionID` remains initiator provenance.
+- Granting ordinary `agent` members cancellation, steering, clearing, resume, group administration, or session-ending authority.
+- Introducing a standalone participant entity or a second collaboration model for peer orchestrators.
+- Making semantic group names globally unique, globally discoverable, or sufficient as a selector.
+- Choosing the database, cross-process transport, or manager-discovery protocol before the remaining boundary decision is confirmed.
 
 ## Decisions
 
-### 1. Separate ownership from collaboration membership
+### 1. Use `AsyncAgent` for the managed record
 
-The task keeps its owner/parent relationship for lifecycle and accountability. A collaboration scope contains a stable scope identity, participants, membership state, and permission grants. A participant's ability to see a task or send a message is evaluated from scope membership, not inferred from task ownership.
+The domain record is an `AsyncAgent`: a managed asynchronous agent session with lifecycle, result, and initiator provenance. Existing `BackgroundTask` and `PersistedTask` names are compatibility names for the implementation migration, not domain concepts. `parentSessionID` is retained as `initiatorSessionID` directionally and is never interpreted as ownership.
 
-Alternative considered: replace `parentSessionID` with a list of collaborators. Rejected because it conflates lifecycle ownership with access control and makes existing completion/resume behavior ambiguous.
+Alternative considered: keep task terminology and add collaborators around it. Rejected because it makes agent lifecycle and result records look like user work items and invites incorrect ownership rules.
 
-### 2. Use session identity as the participant principal
+### 2. Make the coordination group the only collaboration boundary
 
-Participants are identified by session identity, with agent/task metadata attached when available. The model must support a parent, child, and peer orchestrator as the same principal kind; their relationship is metadata, not a different authorization path.
+Groups hold membership records for asynchronous agents and orchestrators. Group membership, not parentage or agent name, determines visibility and communication. A peer orchestrator and a child agent use the same membership and routing model; their role and provenance metadata explain the relationship without changing the boundary.
 
-Alternative considered: authorize by agent name or task ID. Rejected because names are not unique and task IDs do not identify the receiving session.
+Alternative considered: infer collaboration from shared parent sessions. Rejected because it cannot isolate subsets of agents or coordinate peer orchestrators from different initiating sessions.
 
-### 3. Grant capabilities independently
+### 3. Govern groups through explicit roles
 
-Membership grants are represented as separate capabilities for discovery/listing, reading task details, sending messages, and task control. Scope administration (invite/join/revoke) is distinct from ordinary participation. The default for a new scope is private and no session can enumerate or contact it without an explicit grant or invitation accepted through the defined join flow.
+Each membership has exactly one role: `orchestrator` or `agent`. Only an orchestrator may create a group, add a member, change group membership, and end a member session. `agent` members may use the group's allowed visibility and communication surfaces but receive no group or session-control authority.
 
-Alternative considered: one boolean `shared` flag. Rejected because it cannot express controlled visibility without also granting communication or control.
+Alternative considered: grant control capabilities independently to any member. Rejected for this proposal because group governance belongs to orchestrators; ordinary agent control would recreate the discarded task-ownership model.
 
-### 4. Route messages as attributed envelopes
+### 4. Separate semantic names from technical references
 
-Cross-session messages carry the sender session, sender agent when known, sender task when known, target scope, and original body. The receiver sees that envelope and the original text; the router never rewrites the author as the parent or another participant. `bgagent_report` becomes a compatibility surface over the same routing contract.
+The creator supplies an arbitrary semantic group name for display. The system generates an immutable technical group ID. All mutating and listing operations require the technical ID; a semantic name is never a selector. Where a human-facing resolver is useful, it may return a caller's own groups for explicit selection, but it must reject name-based ambiguity rather than choose a group.
 
-Alternative considered: prefixing plain text only. Rejected because text markers are not sufficient for authorization, structured inspection, or reliable attribution.
+Alternative considered: globally unique names or most-recent-name resolution. Rejected because arbitrary creator names must remain valid and neither global uniqueness nor recency is a safe authorization boundary.
 
-### 5. Treat persisted collaboration state as authoritative for recovery
+### 5. Require a group for `bgagent_list`
 
-Scope definitions, membership state, grants, and message delivery metadata needed for recovery are persisted alongside task metadata. On restart, managers reload active scopes and reconcile stale sessions without silently restoring revoked access. In-memory indexes remain caches and must not be the only source for an authorization decision.
+`bgagent_list` accepts a technical group ID and lists only that group. Omitting the ID is an intentional error that explains the requirement and enumerates only the groups in which the caller has membership, including each technical ID and display name when available. The omitted-group response reveals no groups outside the caller's memberships.
 
-Alternative considered: derive scopes from the current `tasks` map after restart. Rejected because it loses peer membership and cannot represent a scope that temporarily has no active task.
+Alternative considered: default to the caller's parent or most recent group. Rejected because implicit selection is ambiguous and would hide the coordination boundary from callers.
 
-### 6. Define atomic membership transitions
+### 6. Preserve attribution through an envelope
 
-Join, revoke, and permission changes are serialized per scope and carry a monotonic revision or equivalent conflict check. A message or listing evaluates membership at a defined read point; revocation prevents subsequent access and does not retroactively erase an already delivered message. Concurrent operations must return a deterministic conflict or current-state result rather than last-write-wins silently.
+Every routed report or message carries sender session ID, sender agent ID/name when available, initiating-session provenance when available, group ID, and the original body. The recipient sees that the sender is another asynchronous agent or orchestrator; routing never rewrites authorship as the parent, group creator, or relay manager. `bgagent_report` remains a compatibility child-to-initiator surface over the same attributed message contract.
 
-Alternative considered: unversioned read-modify-write updates. Rejected because concurrent peer orchestrators could overwrite grants or resurrect revoked members.
+Alternative considered: prefixing the body with a textual marker only. Rejected because it cannot reliably preserve structured identity or support authorization.
+
+### 7. Migrate legacy records into deterministic technical groups
+
+Each legacy persisted managed-agent record is migrated into one group whose members are the recorded agent session with role `agent` and its recorded `parentSessionID` with role `orchestrator`. The technical ID is deterministic from stable legacy identifiers, for example `legacy:<digest(parentSessionID + ":" + agentSessionID)>`. The migration may expose a generated technical label such as `Migrated <agentSessionID>` for display, but it MUST state that no semantic name was chosen by the original creator.
+
+Alternative considered: group all legacy agents by parent or synthesize a semantic name from the parent. Rejected because it can widen visibility between records that were never intentionally grouped and falsely implies creator intent.
+
+### 8. Make groups on-demand and non-revivable
+
+When the last group membership is removed, the group is deleted as an active coordination object. Reusing its semantic name creates a new technical group ID with no inherited members, permissions, messages, or history. Technical IDs are never recycled.
+
+Alternative considered: retain an empty group and reactivate it by name. Rejected because it can resurrect old authorization and historical context.
 
 ## Risks / Trade-offs
 
-- [Risk] Persisted scope state can outlive a session or task. → Mitigation: define explicit inactive-member and empty-scope lifecycle rules, and test restart plus cleanup behavior.
-- [Risk] Compatibility with current parent-only tools may accidentally widen visibility. → Mitigation: require an explicit compatibility mapping and authorization tests proving unrelated sessions remain isolated.
-- [Risk] Cross-manager concurrency may expose stale listings. → Mitigation: specify scope revisions, atomic updates, and read-point semantics before implementation.
-- [Risk] Message retention can expose sensitive reports after membership changes. → Mitigation: distinguish delivery from historical access and require a lead decision on retention and redaction.
-- [Risk] A peer orchestrator may be mistaken for a task owner. → Mitigation: preserve sender and owner fields separately in every data contract and scenario.
+- [Risk] A legacy record may have incomplete initiator metadata. → Mitigation: migration must record an explicit migration error/quarantine outcome rather than invent an orchestrator identity.
+- [Risk] A caller may confuse a display name with a group selector. → Mitigation: require technical IDs in tools and show the distinction in omitted-group errors.
+- [Risk] Ending a session can race with message delivery or member removal. → Mitigation: define a per-group revision/read point and test the boundary explicitly.
+- [Risk] Independent managers may observe stale group membership. → Mitigation: persist revisions and make cross-manager consistency the remaining operational question.
+- [Risk] Renaming all implementation types in one release could break persisted data and APIs. → Mitigation: introduce `AsyncAgent` terminology directionally and retain explicit compatibility decoding during migration.
 
 ## Migration Plan
 
-1. Add the collaboration data contract and persistence representation without changing existing task ownership fields.
-2. Establish the compatibility mapping for current parent-child listing, reporting, completion notification, and resume flows.
-3. Add scope authorization and management surfaces, then route new collaboration messages through the attributed envelope.
-4. Backfill or lazily materialize compatibility scope state for existing persisted tasks, according to the lead's decision on empty and historical scopes.
-5. Roll back by disabling new scope surfaces while retaining legacy task records; do not delete membership or message data until migration and retention policy are confirmed.
+1. Define the `AsyncAgent` and group/membership/message contracts while retaining current persisted field names for decoding.
+2. Migrate every legacy managed-agent record to its deterministic technical group with one `agent` member and one initiating `orchestrator` member; quarantine records that cannot identify the initiator.
+3. Route visibility, `bgagent_report`, and new messages through group membership and role authorization.
+4. Make `bgagent_list` group-required and provide the caller-only group enumeration error for omitted IDs.
+5. Remove empty groups and ensure a reused semantic name creates a new technical ID.
+6. Roll back by retaining legacy record decoding and disabling new group mutations; never restore deleted group permissions or history from a reused name.
 
 ## Open Questions
 
-- Does every launch create a persisted private compatibility scope automatically, or should legacy parent-child access be represented as a derived membership until a scope is explicitly created?
-- Which session is allowed to create a scope, invite participants, change grants, and revoke membership: task owner, current scope administrator, or both?
-- How does a peer orchestrator prove its invitation or join token across plugin instances, and what is the token expiry/replay policy?
-- Should a revoked participant retain access to messages already delivered, historical task details, or neither?
-- What is the lifecycle of a scope with no active participants or tasks, and how long should its audit/message metadata persist?
-- Are task-control operations (cancel, steer, resume, clear) ever grantable through a scope, or are scopes limited to discovery, read, and messaging in the first version?
-- Must collaboration be limited to one plugin process, or must the first implementation coordinate across independent manager instances?
-- Should `bgagent_list` default to the caller's direct compatibility scope, require an explicit scope argument, or support both with an unambiguous private default?
+- Must groups coordinate across independent plugin processes/managers, or is one manager/storage authority the first supported boundary? This determines the required cross-process consistency and message delivery mechanism.
+- If cross-process coordination is required, which existing authenticated channel may carry group membership revisions and attributed messages?

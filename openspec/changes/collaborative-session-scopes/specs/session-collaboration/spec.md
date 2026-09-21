@@ -1,214 +1,238 @@
 ## Purpose
 
-Define explicit, private-by-default collaboration scopes that control which sessions can discover tasks and communicate while keeping task ownership and message authorship distinct.
+Define private, on-demand coordination groups for managed asynchronous agents and orchestrators, with explicit roles, isolated visibility, governed communication, deterministic identification, and preserved message authorship.
 
 ## ADDED Requirements
 
-### Requirement: Collaboration Scope Model
+### Requirement: AsyncAgent Managed Record
 
-The system SHALL represent collaboration as a scope with a stable identifier, an administrator or owner, participant memberships, independent visibility and communication grants, lifecycle state, and a revision suitable for conflict detection. Task ownership SHALL remain separate from scope membership.
+The system SHALL model the managed asynchronous agent as an `AsyncAgent` record containing its session, agent identity, lifecycle, result, and initiating-session provenance. The existing `parentSessionID` value SHALL mean the session that initiated the agent and MUST NOT be treated as agent ownership.
 
-#### Scenario: Create a private scope
+#### Scenario: Record an initiated asynchronous agent
 
-- **WHEN** an authorized session creates a collaboration scope
-- **THEN** the system creates a stable scope record with that session as an administrator
-- **AND** the scope starts private with no implicit unrelated participants
-- **AND** the creator's task ownership is not changed by scope creation
+- **WHEN** an orchestrator initiates an asynchronous agent
+- **THEN** the system records the agent session and lifecycle as one `AsyncAgent`
+- **AND** records the initiator session as provenance
+- **AND** does not transfer ownership of the orchestrator session or invent a task owner
 
-#### Scenario: Represent child and peer participants uniformly
+#### Scenario: Preserve provenance in a message
 
-- **WHEN** a child session or a peer orchestrator joins a scope
-- **THEN** the system records both as the same participant principal type
-- **AND** relationship metadata may identify task or orchestration context without changing authorization semantics
+- **WHEN** an asynchronous agent sends a report or message
+- **THEN** the routed data includes the agent session and its initiating session when available
+- **AND** provenance is not presented as message authorship
 
-### Requirement: Explicit Membership and Authorization
+### Requirement: Coordination Group Identity
 
-The system SHALL require explicit membership and capability grants for scope discovery, task visibility, message sending, and scope administration. A session without a valid grant MUST NOT enumerate the scope, its tasks, or contact its participants. New scopes and memberships SHALL be private by default.
+The system SHALL use a coordination group as the unit of collaboration. A group SHALL have an immutable technical ID, a creator-supplied arbitrary semantic display name, memberships, and lifecycle state. The semantic name MUST NOT be required to be globally unique and MUST NOT be used as an authorization selector.
 
-#### Scenario: Deny an unrelated listing
+#### Scenario: Create a named group
 
-- **WHEN** a session with no membership requests tasks in a scope
-- **THEN** the system denies the request
-- **AND** it does not reveal the scope's existence, members, or task identifiers
+- **WHEN** an orchestrator creates a group with a semantic name
+- **THEN** the system assigns a new immutable technical group ID
+- **AND** preserves the supplied name for display
+- **AND** does not claim that the system or a migrated record chose the semantic name
 
-#### Scenario: Allow separately granted visibility and messaging
+#### Scenario: Resolve an explicit group
 
-- **WHEN** a participant has task-visibility permission but no message-sending permission
-- **THEN** the participant can discover only the authorized task projection
-- **AND** a message attempt is denied without exposing another participant's details
+- **WHEN** a tool receives a technical group ID
+- **THEN** the system resolves that exact group ID
+- **AND** it does not substitute another group with the same semantic name
 
-#### Scenario: Deny unauthorized contact
+#### Scenario: Reject ambiguous name selection
 
-- **WHEN** a session without a valid communication grant attempts to send a message to a scope participant
-- **THEN** the system rejects the message
-- **AND** no delivery occurs
+- **WHEN** a caller attempts to select a group only by a semantic name that matches multiple groups
+- **THEN** the system rejects the selection as ambiguous
+- **AND** requires the technical group ID
 
-### Requirement: Scope Membership Lifecycle
+### Requirement: Governed Group Roles
 
-The system SHALL support explicit invitation or join, acceptance where required, permission changes, revocation, and participant departure. Membership transitions SHALL be authorized, serialized per scope, and observable through a revision or equivalent conflict result.
+Each group membership SHALL have exactly one role, `agent` or `orchestrator`. Only an `orchestrator` member SHALL create groups, add members, change membership, and end member sessions. An `agent` member SHALL have no group-governance or session-ending authority.
 
-#### Scenario: Accept an explicit invitation
+#### Scenario: Allow orchestrator governance
 
-- **WHEN** an invited session accepts a valid invitation
-- **THEN** the system creates the membership with only the granted capabilities
-- **AND** the membership becomes usable at a new scope revision
+- **WHEN** an orchestrator member creates a group or adds a member
+- **THEN** the operation succeeds under the group's authorization rules
+- **AND** the new membership records the selected role explicitly
 
-#### Scenario: Reject an unauthorized join
+#### Scenario: Deny agent governance
 
-- **WHEN** a session attempts to join without an invitation or other explicit authorization
-- **THEN** the system rejects the join
-- **AND** the scope remains unchanged
-
-#### Scenario: Revoke a participant
-
-- **WHEN** an authorized administrator revokes a participant
-- **THEN** subsequent discovery, task reads, and messages use the revoked state and are denied
-- **AND** the scope revision advances
-- **AND** already delivered messages are not rewritten
-
-#### Scenario: Resolve a concurrent membership update
-
-- **WHEN** two actors submit conflicting membership changes against the same scope revision
-- **THEN** one change is applied
-- **AND** the other receives a deterministic conflict or current-state response
-- **AND** the losing request does not silently overwrite the applied grants
-
-### Requirement: Authorized Task Discovery
-
-The system SHALL provide a scope-aware task projection that returns only tasks visible to the requesting participant. Task owners SHALL remain identifiable, and a scope listing MUST NOT imply that the requester owns or controls the listed tasks.
-
-#### Scenario: List authorized tasks from a child collaboration
-
-- **WHEN** a child participant requests a scope task list with visibility permission
-- **THEN** the response contains only tasks authorized by that scope
-- **AND** each task preserves its owner and parent session identity
-
-#### Scenario: List tasks from a peer orchestrator
-
-- **WHEN** a peer orchestrator with visibility permission requests the shared scope
-- **THEN** it sees the same authorized task set as other participants at the same read point
-- **AND** the tasks remain owned by their original sessions
-
-#### Scenario: Hide tasks outside the scope
-
-- **WHEN** a participant lists a scope
-- **THEN** tasks not associated with that scope or not granted to that participant are absent
-- **AND** unrelated task identifiers are not disclosed through counts or errors
-
-### Requirement: Attributed Inter-Session Messaging
-
-The system SHALL route messages only between authorized participants and SHALL preserve the sender session, sender agent when available, sender task when available, target scope, and original message body. The receiver MUST be able to distinguish a message from another background agent from a message authored by the receiver or its parent.
-
-#### Scenario: Deliver an authorized child report
-
-- **WHEN** a child participant sends a report through a scope with communication permission
-- **THEN** the recipient receives an attributed message identifying the child session and task
-- **AND** the original report body is preserved literally
-
-#### Scenario: Deliver a peer orchestrator message
-
-- **WHEN** one authorized orchestrator sends a message to another through a shared scope
-- **THEN** the recipient receives the sending orchestrator's session identity and available agent identity
-- **AND** the message is not labeled as if it came from a child or parent unless that is the actual sender relationship
-
-#### Scenario: Preserve attribution when relaying
-
-- **WHEN** a message is relayed through a manager different from the sender's manager
-- **THEN** the original sender and task fields remain unchanged
-- **AND** the relay does not replace authorship with its own session identity
-
-### Requirement: Scope Lifecycle and Task Lifecycle
-
-The system SHALL define behavior when a participant, task, or session ends without transferring task ownership implicitly. Scope membership SHALL be independently revocable, and task completion, cancellation, clearing, and resumption SHALL remain compatible with authorized scope visibility and messaging.
-
-#### Scenario: Complete a visible task
-
-- **WHEN** a task visible to a scope completes
-- **THEN** authorized participants may receive the completion projection or notification allowed by their grants
-- **AND** the task's owner and completion state remain unchanged
-
-#### Scenario: Resume a visible task
-
-- **WHEN** an authorized participant requests a supported resume operation
-- **THEN** the system applies the existing resume authorization and lifecycle rules
-- **AND** scope visibility does not by itself transfer task ownership
-
-#### Scenario: End a participant session
-
-- **WHEN** a participant session ends or becomes unavailable
-- **THEN** its membership enters the defined inactive state or is removed according to scope policy
-- **AND** other participants' grants and task ownership are not implicitly changed
-
-### Requirement: Scope Persistence and Restart Recovery
-
-The system SHALL persist scope definitions, membership state, grants, revisions, and the metadata required to preserve message attribution and authorization across plugin restarts. Restored in-memory indexes MUST reflect persisted revocations and MUST NOT grant access solely because a task is present in memory.
-
-#### Scenario: Restore an active scope
-
-- **WHEN** the plugin restarts with a persisted active scope
-- **THEN** the scope and its memberships are available after recovery
-- **AND** authorized participants retain only their persisted capabilities
-
-#### Scenario: Preserve revocation across restart
-
-- **WHEN** a participant was revoked before restart
-- **THEN** the participant remains unable to enumerate, read, or message through that scope after recovery
-
-#### Scenario: Recover a scope with no current tasks
-
-- **WHEN** a persisted scope has participants but no active tasks after restart
-- **THEN** the system follows the scope retention policy without deleting the scope or granting unrelated task access
-
-### Requirement: Compatibility with Existing Tools
-
-The system SHALL preserve `bgagent_report`, `bgagent_list`, task completion notifications, cancellation, clearing, and resume behavior. Existing parent-child callers SHALL continue to work through the same explicit collaboration authorization model, and adding a scope MUST NOT make unrelated sessions visible.
-
-#### Scenario: Preserve parent-child report behavior
-
-- **WHEN** an existing child calls `bgagent_report` using the supported parent-child setup
-- **THEN** the report reaches the authorized parent
-- **AND** the delivered content includes sender/task attribution without losing the original report
-
-#### Scenario: Preserve private list behavior
-
-- **WHEN** an existing parent calls `bgagent_list` without requesting broader collaboration
-- **THEN** it sees its authorized child tasks using the existing task projection
-- **AND** it does not see tasks belonging to unrelated parents
-
-#### Scenario: Preserve cancellation and clearing boundaries
-
-- **WHEN** a participant without task-control permission attempts cancellation or clearing through a collaboration scope
+- **WHEN** an agent member attempts to create a group, add a member, or end a session
 - **THEN** the operation is denied
-- **AND** the task remains controlled by its owner and existing lifecycle rules
+- **AND** group membership and session lifecycle remain unchanged
 
-### Requirement: Collaboration Tool and Data Surfaces
+#### Scenario: Use multiple groups for isolation
 
-The system SHALL expose typed surfaces sufficient to create or discover an authorized scope, invite or join participants, change or revoke grants, list authorized tasks, and send attributed messages. Surface names and transport MAY follow existing plugin conventions, but each operation MUST return authorization failures without leaking private scope data.
+- **WHEN** one orchestrator creates multiple groups
+- **THEN** each group receives a distinct technical ID and membership set
+- **AND** membership in one group does not grant visibility into another
 
-#### Scenario: Inspect a scope through a typed surface
+### Requirement: Private Group Isolation
 
-- **WHEN** an authorized participant requests scope metadata
-- **THEN** the response includes the scope identifier, membership state, granted capabilities, and revision
-- **AND** it excludes private members or tasks not authorized for that participant
+Groups SHALL be private by default. Members of the same group SHALL receive only the visibility and communication allowed by that group; agents and orchestrators in different groups MUST NOT enumerate, inspect, or contact one another through a group they do not belong to.
 
-#### Scenario: Use an unauthorized surface
+#### Scenario: Isolate different groups
 
-- **WHEN** an unlinked session invokes any collaboration discovery or messaging surface
-- **THEN** the surface returns a typed authorization failure
-- **AND** it does not return a distinguishable not-found reason that reveals private scope existence
+- **WHEN** an agent belongs to group A and another agent belongs only to group B
+- **THEN** the agent in A cannot list, inspect, or message the agent in B through group coordination
+- **AND** no group B task or member identifier is disclosed
 
-### Requirement: Collaboration Isolation and Concurrency Tests
+#### Scenario: Communicate within one group
 
-The implementation SHALL include tests for default isolation, explicit authorization, independent visibility and communication grants, join and revocation, persisted recovery, attributed messages, peer and child participation, concurrent membership changes, and compatibility with existing tools.
+- **WHEN** two members belong to the same group and the group allows their communication
+- **THEN** a message may be delivered between them
+- **AND** the delivery remains scoped to that group
 
-#### Scenario: Prove unrelated-session isolation
+### Requirement: Group Membership Lifecycle
 
-- **WHEN** two independent scopes and their participants perform discovery and messaging operations
-- **THEN** each participant can access only its authorized scope data
-- **AND** no test assertion depends on an impossible absence without a corresponding possible presence state
+The system SHALL support orchestrator-controlled creation, addition, removal, and session ending for group memberships. Removing the last membership SHALL remove the active group. A later group created with the same semantic name SHALL receive a new technical ID and MUST NOT regain prior members, permissions, messages, or history.
 
-#### Scenario: Prove concurrent revocation
+#### Scenario: Add and remove a member
 
-- **WHEN** a message send races with membership revocation
-- **THEN** the test records the defined authorization read point
-- **AND** no message is delivered after the revocation boundary
+- **WHEN** an orchestrator adds an agent or orchestrator to a group
+- **THEN** the member receives the explicitly assigned role and group access
+- **AND** when the orchestrator removes that membership, subsequent group access is denied
+
+#### Scenario: Remove an empty group
+
+- **WHEN** the last membership is removed from a group
+- **THEN** the active group is deleted
+- **AND** its technical ID is not reused
+
+#### Scenario: Reuse a semantic name
+
+- **WHEN** an orchestrator later creates a group with the same semantic name
+- **THEN** the system creates a new technical group ID
+- **AND** no permissions or history from the removed group are active in the new group
+
+### Requirement: Deterministic Legacy Group Migration
+
+The system SHALL migrate each legacy managed-agent record into a group containing the recorded asynchronous agent with role `agent` and its initiating `parentSessionID` with role `orchestrator`. The migrated technical group ID SHALL be deterministic from stable legacy identifiers, and migration MUST distinguish that technical identity from a semantic name chosen by a creator.
+
+#### Scenario: Migrate a complete legacy record
+
+- **WHEN** the system loads a legacy record with agent session ID and `parentSessionID`
+- **THEN** it creates or finds the same deterministic migrated group on every recovery
+- **AND** the group contains exactly the corresponding agent and initiating orchestrator memberships
+- **AND** the generated display label is marked as migration-generated rather than creator-chosen
+
+#### Scenario: Do not widen legacy visibility
+
+- **WHEN** two legacy records share an initiator but were stored separately
+- **THEN** migration does not combine them unless a deterministic migration rule explicitly identifies the same group
+- **AND** one migrated agent cannot see the other solely because their initiator matches
+
+#### Scenario: Quarantine incomplete legacy provenance
+
+- **WHEN** a legacy record lacks the stable identifier required to identify its initiating orchestrator
+- **THEN** migration records an explicit incomplete-migration outcome
+- **AND** it does not invent an orchestrator or grant group access
+
+### Requirement: Group-Required Agent Listing
+
+The system SHALL require `bgagent_list` to receive a technical group ID. If the group ID is omitted, the tool MUST fail with an explanation that a group is required and enumerate only the groups in which the calling session is a member.
+
+#### Scenario: List one selected group
+
+- **WHEN** a caller supplies a technical group ID for a group in which it is a member
+- **THEN** `bgagent_list` returns only the authorized `AsyncAgent` records from that group
+- **AND** each record retains its initiating-session provenance and agent identity
+
+#### Scenario: Explain an omitted group
+
+- **WHEN** a caller omits the group ID from `bgagent_list`
+- **THEN** the tool fails and explains that a group ID is required
+- **AND** the response enumerates only the caller's group technical IDs and semantic names
+- **AND** it does not enumerate groups or agents outside the caller's memberships
+
+#### Scenario: Reject an unauthorized group
+
+- **WHEN** a caller supplies a technical group ID for a group in which it is not a member
+- **THEN** `bgagent_list` denies the request without revealing that group's agents, history, or count
+
+### Requirement: Attributed Agent Messaging
+
+The system SHALL route `bgagent_report` and other group messages only through authorized group membership. Every delivered message SHALL preserve the sender's session, agent identity when available, initiating-session provenance when available, group ID, and literal body. The recipient MUST be able to identify the sender as another agent or orchestrator rather than as the recipient or its parent.
+
+#### Scenario: Preserve an agent report
+
+- **WHEN** an authorized asynchronous agent sends `bgagent_report`
+- **THEN** the recipient receives sender session, agent identity, and initiating provenance when available
+- **AND** the report body is preserved literally, including line breaks and punctuation
+
+#### Scenario: Preserve peer orchestrator authorship
+
+- **WHEN** an authorized orchestrator sends a message to another orchestrator in the same group
+- **THEN** the recipient sees the sending orchestrator's session identity
+- **AND** the message is not labeled as if it came from an agent or parent unless that is true
+
+#### Scenario: Preserve attribution through a relay
+
+- **WHEN** a manager relays a message between group members
+- **THEN** the original sender and provenance fields remain unchanged
+- **AND** the manager is not substituted as the author
+
+### Requirement: Group Persistence and Recovery
+
+The system SHALL persist active group IDs, semantic names, memberships, roles, lifecycle state, and message-attribution metadata required for recovery. Restart SHALL restore active groups and revoked membership state without reviving removed groups or permissions.
+
+#### Scenario: Restore a group
+
+- **WHEN** the plugin restarts with an active group
+- **THEN** the same technical ID, semantic name, roles, and membership set are available
+- **AND** authorized members can resolve the group by technical ID
+
+#### Scenario: Preserve revocation
+
+- **WHEN** a member was removed before restart
+- **THEN** that member remains unable to list or message through the group after restart
+
+#### Scenario: Do not restore an empty group
+
+- **WHEN** a group had no members before restart
+- **THEN** the active group is absent after recovery
+- **AND** a later group with the same name is a new technical group
+
+### Requirement: Agent Lifecycle Compatibility
+
+The system SHALL preserve asynchronous-agent creation, completion, error, cancellation, result retrieval, resume, and report behavior while treating `parentSessionID` as initiator provenance. Group membership SHALL not transfer or invent lifecycle control for ordinary `agent` members; only authorized orchestrators may end sessions.
+
+#### Scenario: Complete an agent in a group
+
+- **WHEN** an asynchronous agent completes
+- **THEN** its lifecycle and result are updated as before
+- **AND** authorized group members may receive the allowed notification projection
+- **AND** its initiating-session provenance remains unchanged
+
+#### Scenario: Preserve result retrieval and resume
+
+- **WHEN** an authorized existing flow retrieves or resumes an asynchronous agent
+- **THEN** the existing lifecycle and result semantics remain available
+- **AND** group membership does not change the initiating-session provenance
+
+#### Scenario: Deny ordinary agent session control
+
+- **WHEN** an `agent` member attempts to cancel, clear, steer, resume, or end another member's session through group coordination
+- **THEN** the operation is denied
+- **AND** the managed agent lifecycle is unchanged
+
+### Requirement: Group Coordination Verification
+
+The implementation SHALL include tests for role governance, group isolation, deterministic name and ID resolution, legacy migration, empty-group deletion, authorization, literal attribution, restart recovery, concurrency boundaries, and compatibility with existing asynchronous-agent tools.
+
+#### Scenario: Verify isolation and omitted listing
+
+- **WHEN** members of separate groups list and message through the coordination surfaces
+- **THEN** each member sees only its own groups
+- **AND** omitting the `bgagent_list` group ID fails with only the caller's group enumeration
+
+#### Scenario: Verify migration determinism
+
+- **WHEN** the same legacy record is migrated more than once
+- **THEN** it resolves to the same technical group ID and memberships
+- **AND** no semantic creator-selected name is inferred
+
+#### Scenario: Verify revocation and empty deletion
+
+- **WHEN** an orchestrator removes members concurrently with message or list requests
+- **THEN** the implementation applies a defined authorization read point
+- **AND** after the group becomes empty no old permissions or history are available through a reused name

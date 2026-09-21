@@ -1,31 +1,33 @@
 ## Why
 
-The plugin currently models only a parent-child ownership link, so visibility and communication are tied to one parent session. That prevents intentional collaboration among child agents and among peer orchestrators while making broader access unsafe by default.
+The plugin currently treats `BackgroundTask` as if it were a domain task, but it is actually the registry record for an asynchronously managed agent session, its lifecycle, result, and initiating session. Its `parentSessionID` records provenance, while visibility and communication need a separate coordination boundary.
 
 ## What Changes
 
-- Introduce a general collaboration scope that separates task ownership from participant visibility and communication rights.
-- Allow sessions to create, join, discover, and leave explicit collaboration scopes without treating child or peer relationships as separate mechanisms.
-- Keep scopes private by default and require explicit authorization before a participant can enumerate tasks or send messages through a scope.
-- Define scope lifecycle, revocation, persistence, restart recovery, and behavior when tasks or sessions end.
-- Extend task listing and report/message routing to operate through authorized scopes while preserving current parent-child behavior.
-- Preserve sender identity and task identity on every cross-session message; never impersonate the recipient or sender.
-- Add tool and data contracts for collaboration management and scoped task/message access.
-- Specify isolation, authorization, revocation, persistence, concurrency, and compatibility tests.
+- Establish `AsyncAgent` as the domain direction for the managed asynchronous-agent record; retain existing storage names only as compatibility details during migration.
+- Make a coordination group the unit that gathers asynchronous agents and orchestrators for visibility and communication.
+- Give every group member an explicit role: `agent` or `orchestrator`. Only orchestrators create groups, add members, and end sessions.
+- Keep groups private and isolated by default. An orchestrator may create multiple groups to isolate subsets of agents.
+- Give creator-supplied semantic names display meaning only; use immutable technical group IDs for references and deterministic resolution.
+- Require `bgagent_list` to name the group. When the group is omitted, fail with the requirement and enumerate only groups in which the caller participates.
+- Preserve `bgagent_report` and other messages with sender session, agent, provenance, and literal body attribution when available.
+- Automatically migrate each legacy managed-agent record into a deterministic group containing the agent and its initiating orchestrator, without inventing a semantic name chosen by the creator.
+- Remove groups when they have no members; reusing a semantic name creates a new group with no prior permissions or history.
+- Define persistence, restart recovery, isolation, authorization, lifecycle, concurrency, compatibility, and migration tests.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `session-collaboration`: Explicit collaboration scopes for controlled task visibility and inter-session communication, including lifecycle, authorization, persistence, and messaging.
+- `agent-coordination-groups`: On-demand groups that coordinate `AsyncAgent` and orchestrator members, govern visibility and communication, and preserve attributed messaging.
 
 ### Modified Capabilities
 
-- `asyncagents-task`: Task ownership remains parent-linked, while `bgagent_list`, `bgagent_report`, task completion, and resume behavior gain authorized collaboration-scope compatibility.
+- `asyncagents-task`: Reframe managed records as asynchronous agents, retain initiating-session provenance, require group-scoped listing, and preserve lifecycle/result/report compatibility.
 
 ## Impact
 
-- Affected domain types and persistence records for task ownership, scope membership, permissions, and message attribution.
-- Affected `BackgroundManager` discovery and routing, `bgagent_list`, `bgagent_report`, task lifecycle, restart loading, and existing tool registration.
-- New collaboration tool/data surfaces will be specified without prescribing storage or transport implementation.
-- Existing parent-child callers remain supported; private-by-default authorization is the compatibility and security baseline.
+- Affected domain and persisted types currently named `BackgroundTask`/`PersistedTask`, with a direction toward `AsyncAgent` terminology and explicit group membership records.
+- Affected `BackgroundManager`, group resolution and authorization, `bgagent_list`, `bgagent_report`, message routing, restart migration, and session lifecycle operations.
+- Existing parent-child records are migrated into technical compatibility groups; `parentSessionID` remains provenance and is not renamed to ownership.
+- This proposal adds no production code and does not select a cross-process manager/transport design beyond the remaining boundary question.
