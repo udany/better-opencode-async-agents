@@ -531,7 +531,12 @@ export class BackgroundManager {
       path: { id: task.parentSessionID },
       body: {
         agent: task.parentAgent,
-        parts: [{ type: "text", text: message }],
+        parts: [
+          {
+            type: "text",
+            text: `[Background agent report | agent: ${task.agent} | task: ${task.description}]\n${message}`,
+          },
+        ],
       },
     });
     return SUCCESS_MESSAGES.reportSent(task.parentSessionID.slice(0, 8));

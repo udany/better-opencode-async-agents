@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { shortId } from "../../helpers";
+import { BackgroundManager } from "../../manager";
 import type { BackgroundTask, SessionPermission } from "../../types";
 import { createBackgroundProgress } from "../progress";
 import { createBackgroundReport } from "../report";
@@ -177,6 +178,34 @@ describe("bgagent_progress", () => {
 });
 
 describe("bgagent_report", () => {
+  test("forwards a marked report to the parent without changing its message", async () => {
+    const task = createMockTask({
+      agent: "researcher",
+      description: "Investigate the report path",
+    });
+    const promptAsync = mock(() => Promise.resolve());
+    const manager = Object.assign(Object.create(BackgroundManager.prototype), {
+      tasks: new Map([[task.sessionID, task]]),
+      client: { session: { promptAsync } },
+    }) as BackgroundManager;
+    const originalMessage = "Done.\nStill need Y; preserve punctuation: [] {} | ✓";
+
+    await manager.reportToParent(task.sessionID, originalMessage);
+
+    expect(promptAsync).toHaveBeenCalledWith({
+      path: { id: task.parentSessionID },
+      body: {
+        agent: task.parentAgent,
+        parts: [
+          {
+            type: "text",
+            text: `[Background agent report | agent: ${task.agent} | task: ${task.description}]\n${originalMessage}`,
+          },
+        ],
+      },
+    });
+  });
+
   test("creates a tool with correct description", () => {
     const tool = createBackgroundReport({
       reportToParent: mock(() => Promise.resolve("ok")),
